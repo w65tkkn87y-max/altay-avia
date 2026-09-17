@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><title>capture</title>
+<style>body{margin:0;background:#888}#v{width:1600px;height:1000px}</style></head><body>
+<div id="v"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/heli3d.js"></script>
+<script>
+const T=THREE;
+function frame(v){const o=v.orbit;const cx=o.target.x+o.dist*Math.sin(o.phi)*Math.sin(o.theta),cz=o.target.z+o.dist*Math.sin(o.phi)*Math.cos(o.theta),cy=o.target.y+o.dist*Math.cos(o.phi);v.camera.position.set(cx,cy,cz);v.camera.lookAt(o.target);v.renderer.render(v.scene,v.camera);}
+async function save(name,dataUrl){await fetch('http://localhost:8766/save?name='+name,{method:'POST',body:dataUrl});}
+async function run(){
+  const box=document.getElementById('v');
+  const jobs=[
+    // 3/4 вид — для fallback и OG
+    {name:'as350.png',m:'as350',w:1600,h:1000,theta:0.85,phi:1.22,fit:1.22,ty:1.5,tx:-1.5,rotor:'idle',fov:26},
+    {name:'mi8amt.png',m:'mi8amt',w:1600,h:1000,theta:0.85,phi:1.22,fit:1.16,ty:2.5,tx:-2.1,rotor:'idle',fov:26},
+    {name:'mi171.png',m:'mi171',w:1600,h:1000,theta:0.85,phi:1.22,fit:1.16,ty:2.5,tx:-2.1,rotor:'idle',fov:26},
+    // боковой профиль — для прайса и карточек
+    {name:'as350-side.png',m:'as350',w:1600,h:800,theta:0.0,phi:1.52,fit:1.34,ty:1.7,tx:-1.9,rotor:'stop',fov:22},
+    {name:'mi8amt-side.png',m:'mi8amt',w:1600,h:800,theta:0.0,phi:1.52,fit:1.24,ty:2.8,tx:-2.3,rotor:'stop',fov:22},
+    {name:'mi171-side.png',m:'mi171',w:1600,h:800,theta:0.0,phi:1.52,fit:1.24,ty:2.8,tx:-2.3,rotor:'stop',fov:22},
+  ];
+  for(const j of jobs){
+    box.style.width=j.w+'px';box.style.height=j.h+'px';box.innerHTML='';
+    const v=new Heli3D.Viewer(box,{transparent:true,helipad:false,autoRotate:false,rotorState:j.rotor,maxDpr:1,fov:j.fov});
+    v.running=false; // без цикла
+    const M=Heli3D.MODELS[j.m]; v.setModel(M.build(),{fit:j.fit,ty:j.ty,tx:j.tx,theta:j.theta,phi:j.phi});
+    // мягкая тень под моделью: невидимая плоскость с ShadowMaterial
+    const sh=new T.Mesh(new T.PlaneGeometry(60,60),new T.ShadowMaterial({opacity:0.28}));sh.rotation.x=-Math.PI/2;sh.receiveShadow=true;v.scene.add(sh);
+    // поворот винта для «остановленного» вида — чтобы лопасти не закрывали кабину
+    (v.model.userData.rotors||[]).forEach(r=>{if(r.axis==='y')r.obj.rotation.y=0.35;});
+    frame(v);frame(v);
+    const url=v.renderer.domElement.toDataURL('image/png');
+    await save(j.name,url);
+    v.renderer.dispose();
+    document.title='done '+j.name;
+  }
+  document.title='ALL DONE';
+}
+window.addEventListener('load',()=>setTimeout(run,300));
+</script></body></html>

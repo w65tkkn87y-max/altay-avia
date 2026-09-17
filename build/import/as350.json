@@ -1,0 +1,15 @@
+{
+  "_comment": "Eurocopter AS350 (любая купленная/скачанная модель) → ливрея «АлтайАвиа»: белая кабина, тёмно-синие хвостовая балка, киль и полозья.",
+  "delete": [],
+  "materials": {
+    "glass|window|canopy": {"color": "#0E1A24", "metallic": 0.1, "roughness": 0.05, "alpha": 0.92},
+    "blade|rotor": {"color": "#24272B", "metallic": 0.25, "roughness": 0.5},
+    "skid|landing|gear": {"color": "#0F2A6B", "metallic": 0.0, "roughness": 0.42},
+    "tail|boom|fin|stab": {"color": "#0F2A6B", "metallic": 0.0, "roughness": 0.35},
+    "exhaust": {"color": "#7D6A4A", "metallic": 0.9, "roughness": 0.4},
+    "body|fuselage|cabin|hull|paint": {"color": "#F7F8F9", "metallic": 0.0, "roughness": 0.34}
+  },
+  "default_material": {"color": "#F7F8F9", "metallic": 0.0, "roughness": 0.4},
+  "transform": {"scale": 1.0, "rotate_y_deg": 0, "translate": [0, 0, 0]},
+  "ground": true
+}

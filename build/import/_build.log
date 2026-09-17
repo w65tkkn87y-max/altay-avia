@@ -1,0 +1,31 @@
+saved build/import/mi8amt_texture.jpg (2048, 2048)
+габариты, м: 25.37 × 6.16 × 20.10 треугольников: 456003
+MainRotor центр [0.11 0.   0.  ] TailRotor центр [-12.96   4.92  -0.57]
+записано build/import/mi8amt_full.glb 8.7 МБ
+info: mi8amt_full.glb (8.66 MB) → mi8amt_f.glb (13.83 MB)
+info: mi8amt_f.glb (13.83 MB) → mi8amt_s.glb (6.48 MB)
+site/models/mi8amt.js: мешей 62, вершин 149379, треугольников 161898, бинарно 2.9 МБ, файл 3.9 МБ
+info: prune: Removed types... Accessor (248)
+info: prune: Removed types... Accessor (186)
+info: mi8amt_s.glb (6.48 MB) → mi8amt.glb (2.45 MB)
+saved build/import/mi171_texture.jpg (2048, 2048)
+габариты, м: 25.37 × 6.16 × 20.10 треугольников: 456003
+MainRotor центр [0.11 0.   0.  ] TailRotor центр [-12.96   4.92  -0.57]
+записано build/import/mi171_full.glb 8.6 МБ
+info: mi171_full.glb (8.61 MB) → mi171_f.glb (13.78 MB)
+info: mi171_f.glb (13.78 MB) → mi171_s.glb (6.43 MB)
+site/models/mi171.js: мешей 62, вершин 149379, треугольников 161898, бинарно 2.9 МБ, файл 3.9 МБ
+info: prune: Removed types... Accessor (248)
+info: prune: Removed types... Accessor (186)
+info: mi171_s.glb (6.43 MB) → mi171.glb (2.4 MB)
+total 28024
+drwxr-xr-x@  9 artemkutepov  staff      288 Sep 16 23:53 .
+drwxr-xr-x@ 24 artemkutepov  staff      768 Sep 16 20:40 ..
+-rw-r--r--@  1 artemkutepov  staff      939 Sep 16 23:49 README.txt
+-rw-r--r--@  1 artemkutepov  staff  2397084 Sep 16 23:53 mi171.glb
+-rw-r--r--@  1 artemkutepov  staff   630285 Sep 16 23:53 mi171.jpg
+-rw-r--r--@  1 artemkutepov  staff  3893112 Sep 16 23:53 mi171.js
+-rw-r--r--@  1 artemkutepov  staff  2446028 Sep 16 23:50 mi8amt.glb
+-rw-r--r--@  1 artemkutepov  staff   679220 Sep 16 23:49 mi8amt.jpg
+-rw-r--r--@  1 artemkutepov  staff  3893114 Sep 16 23:49 mi8amt.js
+DONE exit=0

@@ -1,0 +1,17 @@
+{
+  "_comment": "Mil Mi-8AMTSh (Sketchfab, 42manako / krftv, CC BY) → Ми-8АМТ «АлтайАвиа». Список удаляемых узлов уточните по `import_model.py list` — имена в чужой модели могут отличаться.",
+  "license_note": "Model by krftv (42manako), Sketchfab, CC BY 4.0 — укажите автора на сайте",
+  "delete": ["pylon", "rocket", "launcher", "gun", "cannon", "machine", "armou?r", "missile", "weapon", "bomb", "b-?8", "s-?8", "ub-?32", "flare", "chaff", "pkt", "kord", "turret", "mount", "rack", "hardpoint", "shield", "plate"],
+  "materials": {
+    "glass|window|canopy|cockpit_glass": {"color": "#0E1A24", "metallic": 0.1, "roughness": 0.05, "alpha": 0.92},
+    "blade|rotor|prop": {"color": "#33372F", "metallic": 0.2, "roughness": 0.55},
+    "tyre|tire|wheel|rubber": {"color": "#17181A", "metallic": 0.0, "roughness": 0.92},
+    "tank|fuel": {"color": "#0E3FA0", "metallic": 0.05, "roughness": 0.3},
+    "exhaust|engine": {"color": "#7D6A4A", "metallic": 0.9, "roughness": 0.4},
+    "gear|strut|chassis": {"color": "#1D3F8A", "metallic": 0.2, "roughness": 0.45},
+    "body|fuselage|hull|main|skin|paint": {"color": "#F5F7F9", "metallic": 0.0, "roughness": 0.35}
+  },
+  "default_material": {"color": "#F5F7F9", "metallic": 0.0, "roughness": 0.4},
+  "transform": {"scale": 1.0, "rotate_y_deg": 0, "translate": [0, 0, 0]},
+  "ground": true
+}

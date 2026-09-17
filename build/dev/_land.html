@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>land</title>
+<style>body{margin:0;background:linear-gradient(180deg,#D9EBFF 0%,#EDF5FF 55%,#FFFFFF 100%)}#v{width:1400px;height:760px}</style></head><body>
+<div id="v"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.16.1/meshopt_decoder.js"></script>
+<script src="js/heli3d.js?v=39"></script>
+<script>
+function frame(v){const o=v.orbit;const cx=o.target.x+o.dist*Math.sin(o.phi)*Math.sin(o.theta),cz=o.target.z+o.dist*Math.sin(o.phi)*Math.cos(o.theta),cy=o.target.y+o.dist*Math.cos(o.phi);v.camera.position.set(cx,cy,cz);v.camera.lookAt(o.target);v.renderer.render(v.scene,v.camera);}
+async function save(name){await fetch('http://localhost:8766/save?name='+name,{method:'POST',body:v.renderer.domElement.toDataURL('image/png')});}
+const q=new URLSearchParams(location.search);
+const v=new Heli3D.Viewer(document.getElementById('v'),{transparent:true,helipad:true,autoRotate:false,rotorState:'fast',maxDpr:1,fov:32,viewOffsetX:+(q.get('off')||0.66)}); v.running=false;
+v.loadGLTF('models/mi171.glb?v=3',{fit:'auto',ty:12},async (err)=>{
+  if(err){document.title='ERR '+err;return;}
+  const views=[['a',1.05,1.53],['b',0.2,1.54],['c',2.6,1.52],['d',-1.2,1.53]];
+  for(const [n,th,ph] of views){ v.orbit.theta=th; v.orbit.phi=ph; v._first=true; frame(v); await save('_land_'+n+'.png'); }
+  document.title='ALL DONE dist='+v.orbit.dist.toFixed(1);
+});
+</script></body></html>

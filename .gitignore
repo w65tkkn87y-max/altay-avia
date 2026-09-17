@@ -1,0 +1,13 @@
+.DS_Store
+__pycache__/
+# логи и временные файлы «моста» для показа с ноутбука
+build/*.log
+build/tunnel_url.txt
+# исходная модель Sketchfab (29 МБ) и промежуточные файлы конвейера — см. README, раздел «Импорт»
+build/import/mi8amtsh/
+build/import/*_full.glb
+build/import/*_f.glb
+build/import/*_s.glb
+build/import/*_w.glb
+site/img/3d/_bake_*.png
+site/img/3d/_check_*.png

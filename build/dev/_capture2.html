@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>capture2</title>
+<style>body{margin:0;background:#888}#v{width:1200px;height:700px}</style></head><body>
+<div id="v"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/heli3d.js"></script>
+<script>
+function frame(v){const o=v.orbit;const cx=o.target.x+o.dist*Math.sin(o.phi)*Math.sin(o.theta),cz=o.target.z+o.dist*Math.sin(o.phi)*Math.cos(o.theta),cy=o.target.y+o.dist*Math.cos(o.phi);v.camera.position.set(cx,cy,cz);v.camera.lookAt(o.target);v.renderer.render(v.scene,v.camera);}
+async function save(name,dataUrl){await fetch('http://localhost:8766/save?name='+name,{method:'POST',body:dataUrl});}
+async function run(){
+  const box=document.getElementById('v');
+  const q=new URLSearchParams(location.search);
+  const v=new Heli3D.Viewer(box,{transparent:false,background:parseInt(q.get('bg')||'10264d',16),helipad:true,autoRotate:false,rotorState:'idle',maxDpr:1,fov:30});
+  v.running=false;
+  const M=Heli3D.MODELS[q.get('m')||'as350']; v.setModel(M.build(),Object.assign({},M.view,{theta:+(q.get('theta')||0.7),phi:+(q.get('phi')||1.2)}));
+  frame(v);frame(v);
+  await save(q.get('name')||'_test.png',v.renderer.domElement.toDataURL('image/png'));
+  document.title='ALL DONE';
+}
+window.addEventListener('load',()=>setTimeout(run,300));
+</script></body></html>

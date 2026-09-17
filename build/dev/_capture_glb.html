@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>capture glb</title>
+<style>body{margin:0;background:#888}#v{width:1600px;height:1000px}</style></head><body>
+<div id="v"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.16.1/meshopt_decoder.js"></script>
+<script src="js/heli3d.js"></script>
+<script>
+/* Статичные рендеры импортированных моделей (img/3d/<m>.png и <m>-side.png) — скопировать в site/ и открыть */
+function frame(v){const o=v.orbit;const cx=o.target.x+o.dist*Math.sin(o.phi)*Math.sin(o.theta),cz=o.target.z+o.dist*Math.sin(o.phi)*Math.cos(o.theta),cy=o.target.y+o.dist*Math.cos(o.phi);v.camera.position.set(cx,cy,cz);v.camera.lookAt(o.target);v.renderer.render(v.scene,v.camera);}
+async function save(name,dataUrl){await fetch('http://localhost:8766/save?name='+name,{method:'POST',body:dataUrl});}
+async function run(){
+  const box=document.getElementById('v');
+  for(const m of ['mi8amt','mi171']){
+    for(const j of [{name:m+'.png',w:1600,h:1000,theta:0.85,phi:1.22,fit:1.16,ty:2.5,tx:-1.4,rotor:'idle',fov:26},{name:m+'-side.png',w:1600,h:800,theta:0.0,phi:1.52,fit:1.24,ty:2.8,tx:-1.6,rotor:'stop',fov:22}]){
+      box.style.width=j.w+'px';box.style.height=j.h+'px';box.innerHTML='';
+      const v=new Heli3D.Viewer(box,{transparent:true,helipad:false,shadowOpacity:0.28,autoRotate:false,rotorState:j.rotor,maxDpr:1,fov:j.fov}); v.running=false;
+      await new Promise((res,rej)=>v.loadGLTF('models/'+m+'.glb?v='+Date.now(),{fit:j.fit,ty:j.ty,tx:j.tx,theta:j.theta,phi:j.phi},err=>err?rej(err):res()));
+      v._first=true; frame(v); frame(v); await save(j.name,v.renderer.domElement.toDataURL('image/png')); v.renderer.dispose();
+    }
+  }
+  document.title='ALL DONE';
+}
+window.addEventListener('load',()=>setTimeout(run,300));
+</script></body></html>

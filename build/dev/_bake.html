@@ -1,0 +1,80 @@
+<!doctype html><html><head><meta charset="utf-8"><title>bake</title>
+<style>body{margin:0;background:#888}</style></head><body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+/* Запекание ливреи «АлтайАвиа» (Ми-8АМТ / Ми-171) в UV-развёртку модели Mil Mi-8AMTSh:
+   цвет вычисляется по мировым координатам (метры, нос +Z, верх +Y, центр фюзеляжа x≈0.9).
+   Скопируйте этот файл в site/ вместе с папкой site/_import/mi8amtsh (scene.gltf), запустите
+   python3 build/save_server.py и откройте /_bake.html?livery=mi8amt (и ?livery=mi171). */
+const q=new URLSearchParams(location.search); const SCALE=+(q.get('scale')||152); const SIZE=+(q.get('size')||4096); const LIV=q.get('livery')||'mi8amt'; const REG=LIV==='mi171'?'RA-25565':'RA-24187'; const TXT=LIV==='mi171'?'#D1B06A':'#0E3FA0'; const TYPE=LIV==='mi171'?'Ми-171':'Ми-8АМТ';
+const KIND={};  // индекс меша (порядок traverse) → тип окраски
+[70,66].forEach(i=>KIND[i]=1);                       // лопасти
+[75,76,69,67,68,71,72,65,63,64,32,54,53,52,51,27,28,29,30,31,50,17,18,16,13,14,12,34,35].forEach(i=>KIND[i]=2); // втулки, шасси, антенны, выхлоп — тёмный металл
+[33,55].forEach(i=>KIND[i]=3);                       // шины
+[6,7,38].forEach(i=>KIND[i]=4);                      // ПЗУ — белые
+[4,40].forEach(i=>KIND[i]=5);                        // баки — тёмно-синие / бежевые
+const renderer=new THREE.WebGLRenderer({antialias:false,preserveDrawingBuffer:true,alpha:true,premultipliedAlpha:false}); renderer.setSize(SIZE,SIZE); renderer.setPixelRatio(1); document.body.appendChild(renderer.domElement);
+function decalCanvas(){
+  const c=document.createElement('canvas'); c.width=2048; c.height=1024; const g=c.getContext('2d');
+  g.clearRect(0,0,2048,1024);
+  // область A (0..2048 × 0..512): хвостовая балка — регистрация + флаг
+  g.fillStyle=TXT; g.font='900 150px "Arial Narrow", Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  g.save(); g.translate(1024,256); g.scale(1.15,1); g.fillText(REG,0,0); g.restore();
+  const fx=200,fy=180; g.fillStyle='#fff'; g.fillRect(fx,fy,110,50); g.fillStyle='#2a52be'; g.fillRect(fx,fy+50,110,50); g.fillStyle='#d52b1e'; g.fillRect(fx,fy+100,110,50);
+  // область B (0..2048 × 512..1024): борт кабины — ALTAY AVIA + тип
+  g.fillStyle=TXT; g.font='900 170px "Arial Narrow", Arial, sans-serif'; g.save(); g.translate(1024,768); g.scale(1.1,1); g.fillText('ALTAY AVIA',0,0); g.restore();
+  g.font='700 70px Arial, sans-serif'; g.fillText(TYPE,1750,600);
+  return c;
+}
+const decalTex=new THREE.CanvasTexture(decalCanvas()); decalTex.flipY=false;
+const vert=`
+varying vec3 vW; varying vec3 vN;
+void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz; vN=normalize(mat3(modelMatrix)*normal); vec2 t=uv-floor(uv); gl_Position=vec4(t*2.0-1.0,0.0,1.0); }`;
+const frag=`
+precision highp float; varying vec3 vW; varying vec3 vN; uniform int kind; uniform int livery; uniform sampler2D decal;
+void main(){
+  vec3 P=vW;
+  vec3 white=vec3(0.96,0.97,0.98), sky=vec3(0.23,0.62,0.90), navy=vec3(0.055,0.25,0.63), olive=vec3(0.20,0.22,0.18), dark=vec3(0.22,0.24,0.27), rubber=vec3(0.09,0.09,0.10), exh=vec3(0.49,0.42,0.29), yellow=vec3(0.95,0.76,0.19);
+  vec3 maroon=vec3(0.31,0.11,0.12), maroonLo=vec3(0.25,0.085,0.095), gold=vec3(0.84,0.70,0.42), beige=vec3(0.74,0.65,0.49);
+  vec3 col=white;
+  if(livery==1){ white=maroon; sky=maroon; navy=maroonLo; }
+  if(kind==1){ col=olive; float r=length(P.xz-vec2(0.85,0.1)); if(r>9.7) col=yellow; }
+  else if(kind==2){ col=dark; }
+  else if(kind==3){ col=rubber; }
+  else if(kind==4){ col=white; }
+  else if(kind==5){ col=(livery==1)?beige:navy; }
+  else if(kind==6){ col=exh; }
+  else {
+    float x=P.x-0.9, y=P.y, z=P.z;
+    if(z<-4.6){                                   // хвостовая балка и киль
+      float mid=-3.45+0.03*(z+4.6); float lo=mid-0.02;
+      col=white; if(y<lo) col=navy;
+      if(livery==1 && abs(y-lo)<0.03) col=gold;
+    } else {                                      // фюзеляж: верх белый, полоса по иллюминаторам, низ тёмный; у носа полоса уходит вверх
+      float rise = z>4.2 ? (z-4.2)*0.28 : 0.0;
+      float bandTop=-4.05+rise, bandBot=-4.85+rise*0.6;
+      if(y>bandTop) col=white; else if(y>bandBot) col=sky; else col=navy;
+      if(abs(y-bandTop)<0.03) col=(livery==1)?gold:vec3(0.96,0.97,0.98);
+      if(livery==1 && abs(y-bandBot)<0.03) col=gold;
+    }
+    float side=vN.x;                              // декали по бортам (нормаль смотрит вбок)
+    if(abs(side)>0.35){
+      float u,v;
+      if(z<-5.6 && z>-9.2 && y>-3.55 && y<-2.95){ u=(z+9.2)/3.6; v=(y+2.95)/-0.6; if(side>0.0) u=1.0-u; vec4 d=texture2D(decal,vec2(u,v*0.5)); col=mix(col,d.rgb,d.a); }
+      if(z>-1.8 && z<1.8 && y>-3.95 && y<-3.5){ u=(z+1.8)/3.6; v=(y+3.5)/-0.45; if(side>0.0) u=1.0-u; vec4 d=texture2D(decal,vec2(u,0.5+v*0.5)); col=mix(col,d.rgb,d.a); }
+    }
+    float l=step(0.985,fract(z*0.9)); col*=1.0-0.06*l;   // лёгкие линии стыков панелей
+  }
+  gl_FragColor=vec4(col,1.0);
+}`;
+async function save(name,dataUrl){ await fetch('http://localhost:8766/save?name='+name,{method:'POST',body:dataUrl}); }
+new THREE.GLTFLoader().load('_import/mi8amtsh/scene.gltf', gltf=>{
+  const m=gltf.scene; m.scale.setScalar(SCALE); m.updateMatrixWorld(true);
+  const scene=new THREE.Scene(); const cam=new THREE.OrthographicCamera(-1,1,1,-1,-1,1);
+  const list=[]; m.traverse(o=>{ if(o.isMesh) list.push(o); });
+  list.forEach((o,k)=>{ o.material=new THREE.ShaderMaterial({vertexShader:vert,fragmentShader:frag,uniforms:{kind:{value:KIND[k]||0},livery:{value:LIV==='mi171'?1:0},decal:{value:decalTex}},side:THREE.DoubleSide,depthTest:false,depthWrite:false}); o.frustumCulled=false; });
+  scene.add(m); renderer.setClearColor(0x000000,0); renderer.render(scene,cam);
+  save('_bake_'+LIV+'.png',renderer.domElement.toDataURL('image/png')).then(()=>{ document.title='BAKED'; });
+});
+</script></body></html>

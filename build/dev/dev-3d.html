@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>dev 3D</title>
+<style>html,body{margin:0;height:100%;background:#dfe7ee;font:14px system-ui}
+#v{position:absolute;inset:0}
+#ui{position:absolute;top:10px;left:10px;z-index:2;display:flex;gap:6px;flex-wrap:wrap}
+button{padding:6px 10px}
+</style></head><body>
+<div id="v"></div>
+<div id="ui">
+<button data-m="as350">AS350</button><button data-m="as350_red">AS350 red</button><button data-m="mi8amt">Ми-8АМТ</button><button data-m="mi171">Ми-171</button>
+<button data-r="stop">stop</button><button data-r="idle">idle</button><button data-r="fast">fast</button>
+<button data-v="side">side</button><button data-v="left">left</button><button data-v="iso2">iso2</button><button data-v="front">front</button><button data-v="top">top</button><button data-v="rear">rear</button><button data-v="iso">iso</button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/heli3d.js"></script>
+<script>
+const q=new URLSearchParams(location.search);
+const V=new Heli3D.Viewer(document.getElementById('v'),{autoRotate:q.get('auto')==='1',wheelZoom:true,rotorState:q.get('r')||'stop'});
+let cur=q.get('m')||'as350';
+function load(k){cur=k;const M=Heli3D.MODELS[k];V.setModel(M.build(),M.view);}
+load(cur);
+const views={side:{theta:0,phi:1.45},left:{theta:Math.PI,phi:1.45},front:{theta:Math.PI/2,phi:1.35},top:{theta:0.3,phi:0.3},rear:{theta:-Math.PI/2,phi:1.35},iso:{theta:0.65,phi:1.22},iso2:{theta:2.4,phi:1.15}};
+function setView(v){Object.assign(V.orbit,views[v]);V.idleTimer=-1e9;}
+if(q.get('v')) setView(q.get('v'));
+if(q.get('d')) V.orbit.dist=+q.get('d');
+document.getElementById('ui').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.m)load(b.dataset.m); if(b.dataset.r)V.setRotorState(b.dataset.r); if(b.dataset.v)setView(b.dataset.v);});
+window.V=V;
+</script>
+</body></html>
