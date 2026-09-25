@@ -9,6 +9,13 @@
   const ROOT = document.documentElement.dataset.root || '';
   const FALLBACK = { as350: 'img/3d/as350.png', mi8amt: 'img/3d/mi8amt.png', mi171: 'img/3d/mi171.png' };
   const GLB = {}; // GLB[key] = true, если для модели есть файл models/<key>.js (список — в <html data-models>)
+  // эталон для истинного масштаба (data-true-scale="1"): габариты Ми-8 с винтами, м — AS350 в том же кадре почти вдвое меньше
+  const REF = { length: 25.37, height: 6.16, width: 20.1, reach: 16.2 };
+  function scaleBar(el) {
+    const v = el._viewer, bar = el.parentElement && el.parentElement.querySelector('.scale-bar'); if (!v || !bar) return;
+    const px = 10 / (2 * v.orbit.dist * Math.tan(v.camera.fov * Math.PI / 360)) * el.clientHeight;   // 10 м на глубине цели орбиты
+    bar.style.setProperty('--scale-px', Math.round(px) + 'px');
+  }
 
   function fallback(el, key) {
     el.innerHTML = ''; const d = document.createElement('div'); d.className = 'viewer-fallback';
@@ -31,12 +38,14 @@
       maxDpr: MOBILE ? 1.5 : 2,
       fov: el.dataset.fov ? parseFloat(el.dataset.fov) : 30,
       viewOffsetX: el.dataset.offset ? parseFloat(el.dataset.offset) : 0.5,
-      shadowOpacity: el.dataset.helipad === '1' ? 0 : 0.16
+      shadowOpacity: el.dataset.helipad === '1' ? 0 : 0.16,
+      scene: el.dataset.helipad === '1' ? 'karasuk' : null,              // площадка «Карасук»: рельеф, снимок, ангары
+      sceneBase: ROOT + 'scene/', sceneVer: document.documentElement.dataset.v || ''
     });
     v.load = (k) => {
       const M = Heli3D.MODELS[k]; if (!M) return;
-      const view = Object.assign({}, M.view, el.dataset.fit ? { fit: el.dataset.fit === 'auto' ? 'auto' : parseFloat(el.dataset.fit) } : {}, el.dataset.ty ? { ty: parseFloat(el.dataset.ty) } : {});
-      const done = () => { el.dataset.model = k; el.dispatchEvent(new CustomEvent('modelchange', { detail: k })); };
+      const view = Object.assign({}, M.view, el.dataset.fit ? { fit: el.dataset.fit === 'auto' ? 'auto' : parseFloat(el.dataset.fit) } : {}, el.dataset.ty ? { ty: parseFloat(el.dataset.ty) } : {}, el.dataset.tyRel ? { tyRel: parseFloat(el.dataset.tyRel) } : {}, el.dataset.trueScale === '1' ? { fitRef: REF } : {}, el.dataset.margin ? { margin: parseFloat(el.dataset.margin) } : {});   // data-ty-rel — доля высоты модели; data-true-scale — общий масштаб для всех бортов
+      const done = () => { el.dataset.model = k; el.dispatchEvent(new CustomEvent('modelchange', { detail: k })); setTimeout(() => scaleBar(el), 50); };
       if (GLB[k] && v.loadPacked) {
         // компактная модель как обычный <script src> + текстура <img>: без fetch/wasm — работает и в песочнице артефакта
         v.loadPacked(k, ROOT + 'models/' + k + '.js?v=' + (document.documentElement.dataset.v || '1'), ROOT + 'models/', view, err => { if (err) { console.warn('3D:', err.message); v.setModel(M.build(), view); } done(); });
@@ -45,6 +54,7 @@
     v.load(key);
     if ('IntersectionObserver' in window) new IntersectionObserver(es => es.forEach(e => v.setVisible(e.isIntersecting)), { threshold: 0 }).observe(el);
     el._viewer = v;
+    window.addEventListener('resize', () => scaleBar(el));
     if (el.dataset.flyin === '1' && !REDUCED) { const go = () => setTimeout(() => v.flyIn(3.4), 150); if (window.AltayUI) AltayUI.onReady(go); else go(); }
     return v;
   }

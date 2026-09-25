@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><title>AS350 views</title>
+<style>body{margin:0;background:#c9d3dc;font:12px sans-serif}#v{width:800px;height:520px}canvas#sheet{display:block}</style></head><body>
+<div id="v"></div><canvas id="sheet" width="1600" height="1560"></canvas>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/heli3d.js?v=dev"></script>
+<script>
+/* Служебная страница: 6 ракурсов импортированной модели в один лист (скопировать в site/, открыть, лист уходит в img/3d/_check_<key>.png) */
+const KEY = new URLSearchParams(location.search).get('m') || 'as350';
+// орбита: камера в (sinφ·sinθ, cosφ, sinφ·cosθ); нос модели +X, правый борт +Z → θ=0 правый борт, θ=π/2 нос
+const VIEWS = [ {t:0.75,p:1.3,l:'3/4 спереди-справа'}, {t:Math.PI-0.75,p:1.3,l:'3/4 спереди-слева'}, {t:0,p:1.57,l:'правый борт'},
+                {t:Math.PI,p:1.57,l:'левый борт'}, {t:-0.6,p:1.2,l:'сзади-справа'}, {t:0.3,p:0.3,l:'сверху'} ];
+if (new URLSearchParams(location.search).get('spin')) VIEWS.splice(0, 6, {t:0,p:1.57,l:'правый борт'}, {t:0.3,p:0.02,l:'сверху'}, {t:-0.35,p:1.5,l:'хвост справа'}, {t:Math.PI/2,p:1.5,l:'спереди'}, {t:0.75,p:1.3,l:'3/4'}, {t:-2.6,p:1.3,l:'сзади-слева'});
+if (new URLSearchParams(location.search).get('views')) VIEWS.splice(0, 6, ...new URLSearchParams(location.search).get('views').split('|').map(t => { const [a, b, l] = t.split(':'); return {t:+a, p:+b, l:l||t}; }));   // ?views=θ:φ:подпись|…
+function frame(v, th, ph){ const o=v.orbit; o.theta=th; o.phi=ph; const cx=o.target.x+o.dist*Math.sin(ph)*Math.sin(th), cz=o.target.z+o.dist*Math.sin(ph)*Math.cos(th), cy=o.target.y+o.dist*Math.cos(ph); v.camera.position.set(cx,cy,cz); v.camera.lookAt(o.target); v.renderer.render(v.scene,v.camera); }
+async function run(){
+  const box=document.getElementById('v'), sh=document.getElementById('sheet').getContext('2d');
+  const v=new Heli3D.Viewer(box,{transparent:true,helipad:false,shadowOpacity:0.25,autoRotate:false,rotorState:'stop',maxDpr:1,fov:28}); v.running=false;
+  const P = new URLSearchParams(location.search);   // ?fit=0.4&tx=0&ty=3.6 — крупный план
+  await new Promise((res,rej)=>v.loadPacked(KEY,'models/'+KEY+'.js?v='+Date.now(),'models/',{fit:+(P.get('fit')||1.1),ty:+(P.get('ty')||1.4),tx:P.get('tx')!==null?+P.get('tx'):undefined},err=>err?rej(err):res()));
+  if (v._texReady) await v._texReady;
+  // ?hl=имя:цвет,имя:цвет — подсветить детали; ?hide=имя,имя — скрыть (для поиска деталей по картинке)
+  const Q = new URLSearchParams(location.search);
+  const hl = {}; (Q.get('hl') || '').split(',').filter(Boolean).forEach(t => { const [n, c] = t.split(':'); hl[n] = '#' + (c || 'ff0000'); });
+  const hide = new Set((Q.get('hide') || '').split(',').filter(Boolean));
+  v.model.traverse(o => { if (!o.isMesh) return; if (hide.has(o.name)) o.visible = false; if (hl[o.name]) o.material = new THREE.MeshBasicMaterial({ color: hl[o.name] }); });
+  if (Q.get('bf')) v.model.traverse(o => { if (!o.isMesh || o.material.transparent) return; o.material = o.material.clone(); o.material.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n if (!gl_FrontFacing) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);'); }; });   // ?bf=1 — изнанка граней пурпурным
+  const spin = +(new URLSearchParams(location.search).get('spin') || 0);   // ?spin=1 — повернуть винты (проверка осей)
+  if (spin) v.model.traverse(o => { if (o.name === 'MainRotor') o.rotation.y = 0.9 * spin; if (o.name === 'TailRotor') o.rotation.z = 1.1 * spin; });
+  await new Promise(r=>setTimeout(r,400));
+  VIEWS.forEach((w,i)=>{ frame(v,w.t,w.p); frame(v,w.t,w.p); sh.fillStyle='#dfe7ef';sh.fillRect((i%2)*800,Math.floor(i/2)*520,800,520);sh.drawImage(v.renderer.domElement,(i%2)*800,Math.floor(i/2)*520,800,520); sh.fillStyle='#000'; sh.fillText(w.l,(i%2)*800+8,Math.floor(i/2)*520+16); });
+  await fetch('http://localhost:8766/save?name=_check_'+KEY+(new URLSearchParams(location.search).get('tag')||'')+'.png',{method:'POST',body:document.getElementById('sheet').toDataURL('image/png')});
+  document.title='DONE '+KEY;
+}
+window.addEventListener('load',()=>setTimeout(()=>run().catch(e=>{document.title='ERR '+e.message;console.error(e);}),200));
+</script></body></html>

@@ -11,3 +11,6 @@ build/import/*_s.glb
 build/import/*_w.glb
 site/img/3d/_bake_*.png
 site/img/3d/_check_*.png
+build/dev/_dbg/
+build/terrain/cache/
+build/import/_mi8_cov.npy

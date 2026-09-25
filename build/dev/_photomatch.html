@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><title>photo match</title>
+<style>body{margin:0;background:#fff}#v{width:1280px;height:624px}</style></head><body>
+<div id="v"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/heli3d.js?v=dev"></script>
+<script>
+/* Служебная: рендер модели камерой, подобранной по фото (?cam=Cx,Cy,Cz,yaw,pitch,roll,f&m=mi171&marks=1) → img/3d/_match_<m>.png */
+const Q = new URLSearchParams(location.search), KEY = Q.get('m') || 'mi171';
+const p = Q.get('cam').split(',').map(Number);
+async function run() {
+  const box = document.getElementById('v');
+  const v = new Heli3D.Viewer(box, { transparent: true, helipad: false, shadowOpacity: 0, autoRotate: false, rotorState: 'stop', maxDpr: 1, fov: 36 }); v.running = false;
+  await new Promise((res, rej) => v.loadPacked(KEY, 'models/' + KEY + '.js?v=' + Date.now(), 'models/', { fit: 1, ty: 1.4 }, e => e ? rej(e) : res()));
+  if (v._texReady) await v._texReady;
+  // модель в просмотрщике может быть смещена/масштабирована — переводим в «сырые» координаты модели
+  const g = v.model; g.position.set(0, 0, 0); g.rotation.set(0, 0, 0); g.scale.set(1, 1, 1); g.updateMatrixWorld(true);
+  if (Q.get('marks')) for (let x = -12; x <= -4; x += 0.5) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.9, 0.03), new THREE.MeshBasicMaterial({ color: x % 1 === 0 ? 0x00ff00 : 0xffff00 }));
+    m.position.set(x, 3.3, 0.55); v.scene.add(m);
+  }
+  const [cx, cy, cz, yaw, pitch, roll, f] = p;
+  const cam = new THREE.PerspectiveCamera(2 * Math.atan(312 / f) * 180 / Math.PI, 1280 / 624, 0.1, 500);
+  const e = new THREE.Euler(pitch, yaw, roll, 'YXZ');   // Ry·Rx·Rz
+  cam.position.set(cx, cy, cz); cam.quaternion.setFromEuler(e); cam.updateMatrixWorld(true);
+  v.renderer.setSize(1280, 624, false); v.renderer.setPixelRatio(1);
+  await new Promise(r => setTimeout(r, 300));
+  v.renderer.render(v.scene, cam);
+  await fetch('http://localhost:8766/save?name=_match_' + KEY + '.png', { method: 'POST', body: v.renderer.domElement.toDataURL('image/png') });
+  document.title = 'DONE';
+}
+window.addEventListener('load', () => setTimeout(() => run().catch(e => { document.title = 'ERR ' + e.message; console.error(e); }), 200));
+</script></body></html>

@@ -79,35 +79,67 @@ ICON = {
 def logo(root):
     return f'<a class="brand" href="{root}index.html" aria-label="АлтайАвиа — на главную"><img class="keep" src="{root}img/misc/logo-big-25.png" alt="АлтайАвиа" width="213" height="70"></a>'
 
-HEAD_FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700&family=Golos+Text:wght@400;500;600;700&family=Oswald:wght@400;500;600&display=swap">'
+HEAD_FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700;800&family=Golos+Text:wght@400;500;600;700&family=Oswald:wght@300;400;500;600&display=swap">'
+
+ICON['spark'] = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 6.9L20 10.5l-6.4 1.6L12 19l-1.6-6.9L4 10.5l6.4-1.6z"/></svg>'
+ICON['arrow-ur'] = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg>'
 
 def header(root, active=''):
-    items = ''.join('<li><a href="%s%s" data-section="%s"%s>%s</a></li>' % (root, h, sec, ' class="is-active"' if sec == active else '', t.upper()) for h, t, sec in NAV)
+    items = ''.join('<li><a href="%s%s" data-section="%s"%s><span>%s</span></a></li>' % (root, h, sec, ' class="is-active"' if sec == active else '', t) for h, t, sec in NAV)
+    mitems = ''.join('<li style="--i:%d"><a href="%s%s"><small>0%d</small><span>%s</span></a></li>' % (i, root, h, i + 1, t) for i, (h, t, sec) in enumerate(NAV))
     return f'''<header class="site-header">
-  <div class="wrap">
-    <div class="brand-row">
-      {logo(root)}
-      <div class="phone-block"><a href="{PHONE_HREF}">{PHONE}</a><small>{PHONE_NOTE}</small></div>
-      <a class="group-link" href="{PREMIER}" target="_blank" rel="noopener"><span>Входим в группу компаний Premier Avia</span><img src="{root}img/misc/pa2025.png" alt="Premier Avia Group" width="70" height="50" loading="lazy"></a>
-    </div>
-    <div class="nav-row">
-      <nav aria-label="Основное меню"><ul class="nav">{items}</ul></nav>
-      <button class="burger" aria-label="Открыть меню" aria-expanded="false"><span></span></button>
+  <div class="topbar"><div class="wrap">
+    <span class="tb-item"><i class="tb-dot"></i>Посадочная площадка «Карасук» · 51°33′36″ N 85°55′03″ E</span>
+    <span class="tb-item tb-clock">На Алтае сейчас <b data-clock>--:--</b></span>
+    <a class="tb-group" href="{PREMIER}" target="_blank" rel="noopener"><span>Входим в группу компаний Premier Avia</span><img src="{root}img/misc/pa2025.png" alt="Premier Avia Group" width="42" height="30" loading="lazy"></a>
+  </div></div>
+  <div class="mainbar"><div class="wrap">
+    {logo(root)}
+    <nav class="nav-wrap" aria-label="Основное меню"><ul class="nav">{items}</ul></nav>
+    <div class="phone-block"><a href="{PHONE_HREF}">{PHONE}</a><small>{PHONE_NOTE}</small></div>
+    <a class="phone-round" href="{PHONE_HREF}" aria-label="Позвонить: {PHONE}">{ICON['phone']}</a>
+    <a class="btn btn-primary btn-sm head-cta magnetic" href="{root}zakaz-poleta.html"><span>Заказать полёт</span>{ICON['arrow']}</a>
+    <button class="burger" aria-label="Открыть меню" aria-expanded="false"><span></span></button>
+  </div></div>
+  <div class="menu-panel">
+    <div class="wrap">
+      <ul class="menu-list">{mitems}</ul>
+      <div class="menu-foot"><a class="menu-phone" href="{PHONE_HREF}">{PHONE}</a><small>{PHONE_NOTE}</small><a class="btn btn-primary" href="{root}zakaz-poleta.html">Заказать полёт</a></div>
     </div>
   </div>
 </header>'''
 
+RIDGE = ('<svg class="ridge" viewBox="0 0 1600 200" preserveAspectRatio="none" aria-hidden="true">'
+         '<path d="M0 200V132l92-38 70 30 96-66 64 42 58-24 120-72 82 60 66-22 104 76 58-30 92 44 112-96 76 50 60-18 118 78 70-36 88 40 94-58 80 38V200z" fill="currentColor" opacity=".3"/>'
+         '<path d="M0 200V156l120-30 84 26 110-48 90 40 76-16 128 52 104-60 88 44 96-28 120 50 92-34 116 40 92-30 104 30 90-18 90 26V200z" fill="currentColor" opacity=".55"/>'
+         '<path d="M0 200v-22l180-14 140 12 160-20 150 18 170-16 160 18 170-14 150 12 130-10 90 8v36z" fill="currentColor"/></svg>')
+
 def footer(root):
-    c1 = ''.join('<li><a href="%s%s">%s</a></li>' % (root, h, t.upper()) for h, t in FOOTER_COL1)
-    c2 = ''.join('<li><a href="%s%s">%s</a></li>' % (root, h, t.upper()) for h, t in FOOTER_COL2)
-    return f'''<footer class="site-footer">
+    c1 = ''.join('<li><a href="%s%s">%s</a></li>' % (root, h, t) for h, t in FOOTER_COL1)
+    c2 = ''.join('<li><a href="%s%s">%s</a></li>' % (root, h, t) for h, t in FOOTER_COL2)
+    return f'''<section class="takeoff" aria-label="Заказ полёта">
+  <div class="takeoff-bg" data-parallax="0.16"><img src="{root}img/hero/slider-kara.jpg" alt="" loading="lazy"></div>
+  <div class="wrap takeoff-inner">
+    <div class="eyebrow eyebrow-light">Готовы к взлёту</div>
+    <h2 class="takeoff-title split-words">Ваш полёт над Алтаем начинается здесь</h2>
+    <p class="takeoff-lead">Позвоните или оставьте заявку — подберём борт и маршрут, рассчитаем стоимость полёта.</p>
+    <div class="takeoff-actions">
+      <a class="btn btn-light btn-lg magnetic" href="{root}zakaz-poleta.html"><span>Заказать полёт</span>{ICON['arrow']}</a>
+      <a class="takeoff-phone" href="{PHONE_HREF}"><small>{PHONE_NOTE}</small>{PHONE}</a>
+    </div>
+  </div>
+  <div class="takeoff-hud" aria-hidden="true"><span>KARASUK</span><span>ELEV 375 M</span><span>51°33′N 085°55′E</span></div>
+</section>
+<footer class="site-footer">
+  {RIDGE}
   <div class="wrap">
     <div class="footer-grid">
       <div class="footer-brand"><img class="keep" src="{root}img/misc/logo-big-25.png" alt="АлтайАвиа" width="213" height="70" loading="lazy"><p>Сертифицированный коммерческий авиаперевозчик. Посадочная площадка «Карасук», Республика Алтай.</p></div>
       <div><h4>Компания</h4><ul>{c1}</ul></div>
       <div><h4>Услуги</h4><ul>{c2}</ul></div>
-      <div class="footer-contact"><a class="tel" href="{PHONE_HREF}">{PHONE}</a><small>{PHONE_NOTE}</small><a class="vk" href="{VK}" target="_blank" rel="noopener">{ICON['vk']}Подписывайтесь на нас в ВКонтакте</a></div>
+      <div class="footer-contact"><h4>Связаться</h4><a class="tel" href="{PHONE_HREF}">{PHONE}</a><small>{PHONE_NOTE}</small><a class="vk" href="{VK}" target="_blank" rel="noopener">{ICON['vk']}Подписывайтесь на нас в ВКонтакте</a></div>
     </div>
+    <div class="footer-mega" aria-hidden="true"><span data-parallax-x="0.12">АлтайАвиа · небо Алтая · АлтайАвиа · небо Алтая</span></div>
     <div class="footer-bottom">
       <div class="legal"><a href="{root}sout.html">СОУТ</a><a href="{root}politika.html">Политика конфиденциальности</a><span>Официальный сайт «АлтайАвиа» <span data-year>2026</span> год</span>{model_credits()}</div>
       <button class="a11y-toggle" type="button" aria-pressed="false">{ICON['eye']}Версия для слабовидящих</button>
@@ -120,39 +152,50 @@ def available_models():
     d = os.path.join(SITE, 'models')
     return ','.join(sorted(f[:-3] for f in os.listdir(d) if f.endswith('.js'))) if os.path.isdir(d) else ''
 
-MODEL_CREDITS = {  # атрибуция внешних 3D-моделей (лицензия CC BY требует указать автора)
+MODEL_CREDITS = {  # атрибуция внешних 3D-моделей (лицензии CC BY и GPL требуют указать авторов)
+    'as350': '3D-модель AS350 — на основе «Eurocopter AS350 Squirrel» (FlightGear UK, github.com/FGMEMBERS/AS350), GPL-2.0',
     'mi8amt': '3D-модели Ми-8АМТ и Ми-171 — на основе «Mil Mi-8AMTSh» (42manako, Sketchfab), CC BY 4.0',
     'mi171': '',
 }
+SCENE_CREDIT = 'Площадка «Карасук»: рельеф SRTM (AWS Terrain Tiles), снимок Sentinel-2 cloudless 2016 © EOX (s2maps.eu), CC BY 4.0'
 def model_credits():
     used = [MODEL_CREDITS[k] for k in available_models().split(',') if MODEL_CREDITS.get(k)]
+    if os.path.isfile(os.path.join(SITE, 'scene', 'karasuk.js')): used.append(SCENE_CREDIT)
     return ''.join(f'<span>{c}</span>' for c in used)
 
-def page(*, root, title, desc, active, body, scripts_3d=False, extra_head='', canonical='', models=()):
+def page(*, root, title, desc, active, body, scripts_3d=False, extra_head='', canonical='', models=(), body_class=''):
     three = ''
     if scripts_3d:
         three = ('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
-                 f'<script src="{root}js/heli3d.js?v={BUILD_V}" defer></script><script src="{root}js/fleet.js?v={BUILD_V}" defer></script>')
-    intro = ('<div class="preloader" aria-hidden="true"><div><div class="rotor"><svg viewBox="0 0 100 100"><g fill="none" stroke="#1E6FD9" stroke-width="5" stroke-linecap="round"><path d="M50 50L50 6"/><path d="M50 50L88 72"/><path d="M50 50L12 72"/></g></svg></div><div class="pl-text">АлтайАвиа</div></div></div>'
-             '<div class="curtain" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>')
-    model_scripts = ''
+                 f'<script src="{root}js/heli3d.js?v={BUILD_V}" defer></script><script src="{root}js/karasuk.js?v={BUILD_V}" defer></script>'
+                 f'<script src="{root}js/fleet.js?v={BUILD_V}" defer></script>')
+    intro = ('<div class="preloader" aria-hidden="true"><div class="pl-inner">'
+             '<div class="pl-rotor"><svg viewBox="0 0 120 120"><g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"><path d="M60 60V8"/><path d="M60 60l45 26"/><path d="M60 60L15 86"/></g><circle cx="60" cy="60" r="7" fill="currentColor"/></svg></div>'
+             '<div class="pl-alt"><span class="pl-num" data-pl-num>0</span><small>м — набор высоты</small></div>'
+             '<div class="pl-bar"><i></i></div><div class="pl-text">АлтайАвиа · Карасук</div></div></div>'
+             '<div class="warp" aria-hidden="true"><div class="warp-disc"></div><div class="warp-mark"><svg viewBox="0 0 120 120"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><path d="M60 60V10"/><path d="M60 60l43 25"/><path d="M60 60L17 85"/></g><circle cx="60" cy="60" r="8" fill="currentColor"/></svg></div></div>'
+             '<aside class="altimeter" aria-hidden="true"><div class="alt-read"><small>ВЫС</small><b data-alt>375</b><small>м</small></div>'
+             '<div class="alt-scale"><i class="alt-fill"></i><i class="alt-cursor"></i></div>'
+             '<div class="alt-marks"><span>4506</span><span>3000</span><span>1500</span><span>375</span></div></aside>'
+             '<div class="cursor" aria-hidden="true"><span class="cursor-label"></span></div>')
     return f'''<!DOCTYPE html>
 <html lang="ru" data-root="{root}" data-models="{available_models()}" data-v="{BUILD_V}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F4F8FE">
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{desc}">
 <meta property="og:type" content="website">
-<meta property="og:image" content="{root}img/3d/as350.png">
+<meta property="og:image" content="{root}img/3d/mi171.png">
 <link rel="icon" href="{root}favicon.svg" type="image/svg+xml">
 {HEAD_FONTS}
 <link rel="stylesheet" href="{root}css/main.css?v={BUILD_V}">
 {extra_head}
 </head>
-<body>
+<body class="{body_class}">
 {intro}
 {header(root, active)}
 <main>
@@ -161,15 +204,19 @@ def page(*, root, title, desc, active, body, scripts_3d=False, extra_head='', ca
 {footer(root)}
 <script src="{root}js/main.js?v={BUILD_V}" defer></script>
 {three}
-{model_scripts}
 </body>
 </html>'''
 
-def band(root, title, image, crumbs, sub=''):
+def band(root, title, image, crumbs, sub='', pos='center'):
+    """Обложка внутренней страницы: фото во всю ширину с параллаксом, крошки, заголовок посимвольно, приборная строка."""
     cr = ''.join('<li>%s</li>' % (('<a href="%s%s">%s</a>' % (root, h, t)) if h else t) for h, t in crumbs)
     subhtml = f'<p class="lead">{sub}</p>' if sub else ''
-    return f'''<section class="page-band"><div class="bg" style="background-image:url('{root}img/hero/{image}')"></div>
-  <div class="wrap"><nav class="crumbs" aria-label="Вы здесь"><ul><li><a href="{root}index.html">Главная</a></li>{cr}</ul></nav><h1><span class="h-split">{title}</span></h1>{subhtml}</div></section>'''
+    src = image if '/' in image else 'img/hero/' + image
+    return f'''<section class="page-band">
+  <div class="bg" data-parallax="0.3"><img src="{root}{src}" alt="" style="object-position:{pos}"></div>
+  <div class="wrap band-inner"><nav class="crumbs" aria-label="Вы здесь"><ul><li><a href="{root}index.html">Главная</a></li>{cr}</ul></nav><h1><span class="h-split">{title}</span></h1>{subhtml}</div>
+  <div class="band-hud" aria-hidden="true"><span>51°33′N · 085°55′E</span><span class="band-line"></span><span>АлтайАвиа</span></div>
+</section>'''
 
 def write(path, html):
     full = os.path.join(SITE, path)

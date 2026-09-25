@@ -1,0 +1,2 @@
+Источник: FGUK Eurocopter AS350 Squirrel (FlightGear), https://github.com/FGMEMBERS/AS350 (master, 2019), лицензия GPL-2.0 (см. COPYING).
+Взяты: Models/as350a-test.ac, текстуры ливреи default (as350b_01..05, 2048 px), салон as350bi_01..09, as350b_06, TailRotor/*.

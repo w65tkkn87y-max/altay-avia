@@ -3,6 +3,10 @@
 import json, os, re, html as H
 from common import *
 
+# ширина рендера борта на карточках относительно Ми-8 (по длине с винтами: 12.9 м против 25.4 м)
+SCALE_K = {'as350': 0.56, 'mi8amt': 1, 'mi171': 1}
+BAND_HELI = {'as350': 'img/gallery/evro-2025/e003.jpg', 'mi8amt': 'img/gallery/mi8amt/01-000.jpg', 'mi171': 'img/gallery/foto24/20250728_142818.jpg'}
+
 EX = json.load(open(os.path.join(DATA, 'excursions.json'), encoding='utf-8'))
 POLICY = open(os.path.join(DATA, 'politika_body.html'), encoding='utf-8').read()
 
@@ -30,7 +34,7 @@ def build_index():
 def build_arenda():
     root = ''
     rows = ''.join(f'''<div class="pass">
-  <div class="thumb"><img src="img/3d/{k}-side.png" alt="{HELIS[k]['name']}" loading="lazy"></div>
+  <div class="thumb"><img src="img/3d/{k}-side.png" alt="{HELIS[k]['name']}" loading="lazy" style="--k:{SCALE_K[k]}"></div>
   <div class="name"><b>{HELIS[k]['name']}</b><small>{HELIS[k]['sub']}</small></div>
   <div class="kv pax"><small>Кол-во пассажиров</small><b>{HELIS[k]['pax']}</b></div>
   <div class="kv price"><small>Стоимость, 1 час</small><b>{HELIS[k]['price']}</b></div>
@@ -38,7 +42,7 @@ def build_arenda():
 </div>''' for k in HELI_ORDER)
     purposes = [('Бизнес и VIP\nполеты', ICON['brief']), ('Чартерные\nперелеты', ICON['charter']), ('Экскурсии\nи путешествия', ICON['compass']), ('Доставка\nв аэропорт', ICON['airport']), ('Фото и видео\nсъемка', ICON['camera'])]
     purp = ''.join(f'<div class="purpose">{ic}<b>{t}</b></div>' for t, ic in purposes)
-    body = band(root, 'Аренда вертолетов', 'band-arenda-2.jpg', [(None, 'Аренда')], 'Компания «АлтайАвиа» предлагает в аренду современные вертолеты!') + f'''
+    body = band(root, 'Аренда вертолетов', 'slider-arenda.jpg', [(None, 'Аренда')], 'Компания «АлтайАвиа» предлагает в аренду современные вертолеты!') + f'''
 <section class="section">
   <div class="wrap">
     <div class="section-head reveal"><div><div class="eyebrow">Тарифы</div><h2>Стоимость аренды вертолетов</h2></div><p>Цена указана за один лётный час. Итоговая стоимость маршрута рассчитывается по общему времени аренды.</p></div>
@@ -87,12 +91,12 @@ def route_card(it, root):
 def build_ekskursii():
     root = ''
     n_alt = sum(1 for e in EX if e['cat'] == 'altai'); n_vil = sum(1 for e in EX if e['cat'] == 'village')
-    body = band(root, 'Экскурсии на вертолёте', 'band-eee.jpg', [(None, 'Экскурсии')]) + f'''
+    body = band(root, 'Экскурсии на вертолёте', 'video-fon.jpg', [(None, 'Экскурсии')]) + f'''
 <section class="section">
   <div class="wrap">
     <div class="dir-grid">
-      <a class="dir-card reveal" href="ekskursii/gornyj-altay.html"><img src="img/eks/eks-altai.jpg" alt=""><span class="count">{n_alt} маршрутов</span><div class="body"><h3>Экскурсии по Горному Алтаю</h3><p>Старт с посадочной площадки «Карасук» — Катунь, Белуха, Телецкое озеро, плато Укок и другие маршруты</p></div></a>
-      <a class="dir-card reveal" href="ekskursii/altay-village.html"><img src="img/eks/eks-village.jpg" alt=""><span class="count">{n_vil} маршрутов</span><div class="body"><h3>Экскурсии с Altay Village</h3><p>Маршруты для гостей курорта Altay Village Телецкое</p></div></a>
+      <a class="dir-card reveal" href="ekskursii/gornyj-altay.html"><img src="img/eks/eks23-b-bel1007.jpg" alt="" loading="lazy"><span class="count">{n_alt} маршрутов</span><div class="body"><h3>Экскурсии по Горному Алтаю</h3><p>Старт с посадочной площадки «Карасук» — Катунь, Белуха, Телецкое озеро, плато Укок и другие маршруты</p></div></a>
+      <a class="dir-card reveal" href="ekskursii/altay-village.html"><img src="img/eks/eks23-b-t00.jpg" alt="" loading="lazy"><span class="count">{n_vil} маршрутов</span><div class="body"><h3>Экскурсии с Altay Village</h3><p>Маршруты для гостей курорта Altay Village Телецкое</p></div></a>
     </div>
     <div class="prose reveal" style="margin-top:44px">
       <p>Полет на вертолете — это увлекательный отдых и прекрасный способ получить необычные ощущения и незабываемые эмоции. Любое мероприятие — свидание, день рождения или просто прогулка — станут более удивительными на борту вертолета, движущемуся на высоте птичьего полета. Благодаря большим обзорным окнам вам доступен роскошный вид за бортом. А возможность вертолета регулировать скорость и зависать над объектами, позволяет лучше рассмотреть понравившиеся места.</p>
@@ -103,8 +107,8 @@ def build_ekskursii():
     write('ekskursii.html', page(root=root, title='Экскурсии на вертолёте по Барнаулу, Горному Алтаю и Белокурихе', desc='Вертолётные экскурсии по Горному Алтаю и с курорта Altay Village: Катунь, Белуха, Телецкое озеро, Каракольские озёра, плато Укок, Белокуриха, Шерегеш.', active='ekskursii', body=body))
 
     for cat, fname, title, bandimg, sub in [
-        ('altai', 'gornyj-altay', 'Экскурсии на вертолёте по Горному Алтаю', 'band-eee.jpg', 'Начало и завершение маршрутов — на посадочной площадке «Карасук», с. Чепош, Чемальский район.'),
-        ('village', 'altay-village', 'Экскурсии на вертолёте с Altay Village', 'band-eee.jpg', 'Маршруты для гостей курорта Altay Village Телецкое.')]:
+        ('altai', 'gornyj-altay', 'Экскурсии на вертолёте по Горному Алтаю', 'img/gallery/foto24/20240725_141140.jpg', 'Начало и завершение маршрутов — на посадочной площадке «Карасук», с. Чепош, Чемальский район.'),
+        ('village', 'altay-village', 'Экскурсии на вертолёте с Altay Village', 'img/gallery/foto24/20240725_141142.jpg', 'Маршруты для гостей курорта Altay Village Телецкое.')]:
         root = '../'
         items = [e for e in EX if e['cat'] == cat]
         cards = ''.join(route_card(it, root) for it in items)
@@ -139,7 +143,7 @@ def build_ekskursii():
         if extra_local:
             gal = '<div class="photo-strip">' + ''.join(f'<a href="{root}{l}" data-lightbox="route" data-caption="{esc(it["title"])}"><img src="{root}{l}" alt="" loading="lazy"></a>' for l in extra_local) + '</div>'
         hero_img = f'<div class="route-hero"><img src="{root}{it["img"]}" alt="{esc(it["title"])}"></div>' if it['img'] else ''
-        body = band(root, it['title'], 'band-eee.jpg', [('ekskursii.html', 'Экскурсии'), (cat_href, cat_title.replace('Экскурсии ', ''))]) + f'''
+        body = band(root, it['title'], 'video-fon.jpg', [('ekskursii.html', 'Экскурсии'), (cat_href, cat_title.replace('Экскурсии ', ''))]) + f'''
 <section class="section"><div class="wrap route-page">
   <article>
     {hero_img}
@@ -180,14 +184,14 @@ def karasuk_map(root):
     <rect width="600" height="420" fill="#0E2244"/><rect width="600" height="420" fill="url(#grid)"/>
     <g fill="none" stroke="#5AA7F0" stroke-opacity=".35"><path d="M-20 300c80-40 140-10 210-60s120-120 220-110 150 60 210 40"/><path d="M-20 340c80-40 140-10 210-60s120-120 220-110 150 60 210 40"/><path d="M-20 260c80-40 140-10 210-60s120-120 220-110 150 60 210 40"/></g>
     <path d="M40 420C120 330 160 300 230 250S330 160 420 120s110-60 180-70" fill="none" stroke="#7FC0FF" stroke-width="7" stroke-linecap="round" opacity=".8"/>
-    <text x="300" y="196" fill="#BFE0FF" font-family="JetBrains Mono, monospace" font-size="12" transform="rotate(-38 300 196)">р. Катунь</text>
+    <text x="300" y="196" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12" transform="rotate(-38 300 196)">р. Катунь</text>
     <path d="M0 400C150 380 260 330 330 300s160-90 270-80" fill="none" stroke="#F2C230" stroke-width="2" stroke-dasharray="2 8" opacity=".9"/>
-    <text x="420" y="240" fill="#F2C230" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="1">Чуйский тракт</text>
-    <g transform="translate(270 262)"><circle r="38" fill="none" stroke="#F2C230" stroke-width="3"/><circle r="52" fill="none" stroke="#F2C230" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="4 6"/><text y="10" text-anchor="middle" fill="#F2C230" font-family="Exo 2, Arial, sans-serif" font-size="34" font-weight="800">H</text></g>
-    <text x="270" y="335" text-anchor="middle" fill="#fff" font-family="Exo 2, Arial, sans-serif" font-size="16" font-weight="700">Площадка «Карасук»</text>
-    <text x="270" y="354" text-anchor="middle" fill="#BFE0FF" font-family="JetBrains Mono, monospace" font-size="12">51°33′36″ N · 085°55′03″ E</text>
-    <text x="470" y="70" fill="#BFE0FF" font-family="JetBrains Mono, monospace" font-size="12">с. Чепош ↗</text>
-    <text x="60" y="60" fill="#BFE0FF" font-family="JetBrains Mono, monospace" font-size="12">Горно-Алтайск ↖ 60 км</text>
+    <text x="420" y="240" fill="#F2C230" font-family="Oswald, Arial Narrow, sans-serif" font-size="11" letter-spacing="1">Чуйский тракт</text>
+    <g transform="translate(270 262)"><circle r="38" fill="none" stroke="#F2C230" stroke-width="3"/><circle r="52" fill="none" stroke="#F2C230" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="4 6"/><text y="10" text-anchor="middle" fill="#F2C230" font-family="Unbounded, Arial, sans-serif" font-size="34" font-weight="800">H</text></g>
+    <text x="270" y="335" text-anchor="middle" fill="#fff" font-family="Unbounded, Arial, sans-serif" font-size="16" font-weight="700">Площадка «Карасук»</text>
+    <text x="270" y="354" text-anchor="middle" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12">51°33′36″ N · 085°55′03″ E</text>
+    <text x="470" y="70" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12">с. Чепош ↗</text>
+    <text x="60" y="60" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12">Горно-Алтайск ↖ 60 км</text>
     <g transform="translate(540 370)" fill="none" stroke="#fff" stroke-opacity=".7"><circle r="18"/><path d="M0-18v36M-18 0h36"/><path d="M0-18l5 10h-10z" fill="#fff"/></g>
   </svg>
   <div class="map-links"><a href="https://yandex.ru/maps/?pt=85.9175,51.56&z=13&l=map" target="_blank" rel="noopener">Яндекс Карты</a><a href="https://2gis.ru/geo/85.9175,51.56" target="_blank" rel="noopener">2ГИС</a><a href="https://www.google.com/maps?q=51.56,85.9175" target="_blank" rel="noopener">Google Maps</a></div>
@@ -197,7 +201,7 @@ def build_ploshchadki():
     root = ''
     photos = ['img/gallery/karasuk25/a1.jpg', 'img/gallery/karasuk25/a2.jpg', 'img/gallery/karasuk25/p003.jpg', 'img/gallery/karasuk25/p004.jpg']
     strip = ''.join(f'<a href="{p}" data-lightbox="karasuk" data-caption="Посадочная площадка «Карасук»"><img src="{p}" alt="Посадочная площадка «Карасук»" loading="lazy"></a>' for p in photos)
-    body = band(root, 'Посадочные площадки для вертолетов', 'band-ploshadki-2.jpg', [(None, 'Площадки')]) + f'''
+    body = band(root, 'Посадочные площадки для вертолетов', 'img/gallery/karasuk25/a1.jpg', [(None, 'Площадки')]) + f'''
 <section class="section"><div class="wrap">
   <div class="site-card reveal">
     <div class="info">
@@ -228,7 +232,7 @@ def build_servis():
               ('Продажа оборудования, расходных материалов для вертолетов', ICON['tag']),
               ('Предполетная подготовка в рамках договора на техническое обслуживание', ICON['wrench'])]
     ex = ''.join(f'<li>{ic}<span>{t}</span></li>' for t, ic in extras)
-    body = band(root, 'Сервисное обслуживание вертолетов', 'band-servis.jpg', [(None, 'Сервис')]) + f'''
+    body = band(root, 'Сервисное обслуживание вертолетов', 'slider-servis.jpg', [(None, 'Сервис')]) + f'''
 <section class="section"><div class="wrap split">
   <div class="prose reveal">
     <div class="eyebrow">Авиационно-техническая база</div>
@@ -249,8 +253,8 @@ def build_servis():
 def build_about():
     root = ''
     certs = ''.join(f'<a href="img/gallery/sertif2023/{f}" data-lightbox="cert" data-caption="Сертификат эксплуатанта"><img src="img/gallery/sertif2023/{f}" alt="Сертификат" loading="lazy"></a>' for f in ['page-0001.jpg', 'page-0004.jpg', 'page-0006.jpg'])
-    cards = ''.join(f'<a class="heli-card tilt" href="vertolety/{k}.html"><div class="pic"><img src="img/3d/{k}-side.png" alt="{HELIS[k]["name"]}" loading="lazy"></div><div class="txt"><h3>{HELIS[k]["name"]}</h3><small>{HELIS[k]["sub"]}</small><div class="pax">Кол-во пассажиров: <b>{HELIS[k]["pax"]}</b></div></div></a>' for k in HELI_ORDER)
-    body = band(root, 'О компании', 'band-o-komp.jpg', [(None, 'О компании')]) + f'''
+    cards = ''.join(f'<a class="heli-card tilt" href="vertolety/{k}.html"><div class="pic"><img src="img/3d/{k}-side.png" alt="{HELIS[k]["name"]}" loading="lazy" style="--k:{SCALE_K[k]}"></div><div class="txt"><h3>{HELIS[k]["name"]}</h3><small>{HELIS[k]["sub"]}</small><div class="pax">Кол-во пассажиров: <b>{HELIS[k]["pax"]}</b></div></div></a>' for k in HELI_ORDER)
+    body = band(root, 'О компании', 'fon.jpg', [(None, 'О компании')]) + f'''
 <section class="section"><div class="wrap">
   <div class="group-banner reveal"><img src="img/misc/pa2025.png" alt="Premier Avia Group"><div><b>С 1 октября 2023 года Авиакомпания АлтайАвиа вошла в состав <a href="{PREMIER}" target="_blank" rel="noopener">PREMIER AVIA GROUP</a>.</b><p>Группа компаний Premier Avia объединяет вертолётных операторов и сервисные базы.</p></div></div>
   <p class="lead reveal" style="margin-top:32px">«АлтайАвиа» – одна из самых крупных вертолетных компаний в Сибири с выгодным расположением к соседним регионам, располагающей сетью посадочных площадок на многих популярных туристических объектах Алтая.</p>
@@ -290,7 +294,7 @@ def build_gallery():
     for t, s, d, files in blocks:
         imgs = ''.join(f'<a href="img/gallery/{d}/{f}" data-lightbox="{d}" data-caption="{esc(t)}"><img src="img/gallery/{d}/{f}" alt="{esc(t)}" loading="lazy"></a>' for f in files)
         html += f'<div class="gallery-block reveal"><div class="head"><h2>{t}</h2><span>{s}</span></div><div class="gallery-grid">{imgs}</div></div>'
-    body = band(root, 'Галерея', 'band-angar.jpg', [(None, 'Галерея')]) + f'<section class="section"><div class="wrap">{html}</div></section>'
+    body = band(root, 'Галерея', 'slider-hranenie.jpg', [(None, 'Галерея')]) + f'<section class="section"><div class="wrap">{html}</div></section>'
     write('galereya.html', page(root=root, title='Галерея авиакомпании Алтай Авиа', desc='Фотографии вертолётов МИ-8АМТ, МИ-171 и Eurocopter AS350 авиакомпании «АлтайАвиа», салоны и вертодром «Карасук».', active='galereya', body=body))
 
 # ---------------------------------------------------------------- Онлайн-оплата
@@ -308,7 +312,7 @@ def build_pay():
   <div class="form-actions"><button class="btn btn-primary" type="submit">Перейти к оплате</button><span class="form-status" role="status" aria-live="polite"></span></div>
   <div class="cards-row"><span>VISA</span><span>MasterCard</span><span>МИР</span></div>
 </form></div>'''
-    body = band(root, 'Онлайн оплата', 'band-kontakty.jpg', [(None, 'On-line оплата')]) + f'''
+    body = band(root, 'Онлайн оплата', 'img/gallery/karasuk25/p003.jpg', [(None, 'On-line оплата')]) + f'''
 <section class="section"><div class="wrap">
   <div class="pay-grid">
     {payform('perev', 'Оплата за услугу "Коммерческие воздушные перевозки"', 'НДС — 0%')}
@@ -361,7 +365,7 @@ def build_pay():
 # ---------------------------------------------------------------- Контакты
 def build_contacts():
     root = ''
-    body = band(root, 'Контакты', 'band-kontakty.jpg', [(None, 'Контакты')]) + f'''
+    body = band(root, 'Контакты', 'img/gallery/karasuk25/a2.jpg', [(None, 'Контакты')]) + f'''
 <section class="section"><div class="wrap">
   <div class="site-card reveal">
     <div class="info">
@@ -389,7 +393,7 @@ def build_contacts():
 # ---------------------------------------------------------------- Заказ полёта
 def build_order():
     root = ''
-    body = band(root, 'Заказ полета', 'band-arenda-2.jpg', [(None, 'Заказ полета')], 'Заполните заявку — мы перезвоним, уточним детали и рассчитаем стоимость.') + f'''
+    body = band(root, 'Заказ полета', 'img/gallery/mi8amt/01-000.jpg', [(None, 'Заказ полета')], 'Заполните заявку — мы перезвоним, уточним детали и рассчитаем стоимость.') + f'''
 <section class="section"><div class="wrap order-layout">
   <div>{order_form(root, 'flight', subject='Заказ полёта')}</div>
   <aside class="order-side reveal reveal-r">
@@ -405,7 +409,7 @@ def build_policy():
     root = ''
     heads = re.findall(r'<h2 id="(p\d+)">(.*?)</h2>', POLICY)
     toc = '<ol class="toc">' + ''.join(f'<li><a href="#{i}">{t.split(". ",1)[1].capitalize()}</a></li>' for i, t in heads) + '</ol>'
-    body = band(root, 'Политика конфиденциальности', 'band-o-komp.jpg', [(None, 'Политика конфиденциальности')], 'Политика по обработке персональных данных ООО «АлтайАвиа»') + f'''
+    body = band(root, 'Политика конфиденциальности', 'fon.jpg', [(None, 'Политика конфиденциальности')], 'Политика по обработке персональных данных ООО «АлтайАвиа»') + f'''
 <section class="section"><div class="wrap doc">
   <div class="eyebrow">Содержание</div>{toc}
   {POLICY.replace('<p>Обновлено:', '<p class="updated">Обновлено:')}
@@ -421,7 +425,7 @@ def build_sout():
     html = ''
     for y, docs in years:
         html += f'<div class="sout-year reveal"><h2>{y} год</h2><div class="sout-list">' + ''.join(f'<a href="docs/sout/{f}" target="_blank" rel="noopener">{ICON["pdf"]}<span>{t}</span><span class="pdf">PDF</span></a>' for f, t in docs) + '</div></div>'
-    body = band(root, 'Специальная оценка условий труда', 'band-o-komp.jpg', [(None, 'СОУТ')]) + f'<section class="section"><div class="wrap doc">{html}</div></section>'
+    body = band(root, 'Специальная оценка условий труда', 'img/gallery/karasuk25/p004.jpg', [(None, 'СОУТ')]) + f'<section class="section"><div class="wrap doc">{html}</div></section>'
     write('sout.html', page(root=root, title='СОУТ — специальная оценка условий труда | АлтайАвиа', desc='Сводные ведомости результатов специальной оценки условий труда и перечни рекомендуемых мероприятий ООО «АлтайАвиа», 2021–2025.', active='', body=body))
 
 # ---------------------------------------------------------------- Страницы вертолётов
@@ -435,13 +439,14 @@ def build_helis():
         specs = ''.join(f'<div><dt>{a}</dt><dd>{b}</dd></div>' for a, b in h['specs'])
         routes = [e for e in EX if any(('AS350' in r['heli']) if k == 'as350' else (('8АМТ' in r['heli']) if k == 'mi8amt' else ('171' in r['heli'])) for r in e['rows'])]
         rl = ''.join(f'<li><a href="{root}ekskursii/{e["slug"]}.html">{esc(e["title"])}</a></li>' for e in routes[:10])
-        body = band(root, h['name'], 'band-angar.jpg', [('o-kompanii.html', 'О компании'), (None, h['name'])], h['sub']) + f'''
+        body = band(root, h['name'], BAND_HELI[k], [('o-kompanii.html', 'О компании'), (None, h['name'])], h['sub']) + f'''
 <section class="section section-sky"><div class="wrap">
   <div class="fleet">
-    <div class="fleet-stage">
-      <div class="viewer" id="heli-viewer" data-model="{k}" data-helipad="1" data-rotor="idle" data-auto="1" data-theta="0.7" data-phi="1.45" data-fit="auto" data-ty="3.5" data-fov="30" aria-label="3D-модель {esc(h['name'])}"></div>
+    <div class="fleet-stage" data-cursor="Вращать">
+      <div class="viewer" id="heli-viewer" data-model="{k}" data-helipad="1" data-rotor="idle" data-auto="1" data-theta="0.7" data-phi="1.42" data-fit="auto" data-ty-rel="0.5" data-true-scale="1" data-fov="30" aria-label="3D-модель {esc(h['name'])}"></div>
       <div class="shutter" aria-hidden="true"></div>
-      <div class="stage-hud"><span class="chip">Live 3D</span><span class="chip">борт {h['reg']}</span></div>
+      <div class="stage-hud"><span class="chip">Live 3D</span><span class="chip">борт {h['reg']}</span><span class="chip">масштаб 1:1</span></div>
+      <div class="scale-bar" aria-hidden="true"><i></i><span>10 м</span></div>
       <div class="stage-controls">
         <button type="button" data-rotor="stop" data-target="#heli-viewer" aria-label="Остановить винты">{ICON['pause']}</button>
         <button type="button" data-rotor="idle" data-target="#heli-viewer" aria-pressed="true" aria-label="Медленное вращение винтов">{ICON['rotor']}</button>

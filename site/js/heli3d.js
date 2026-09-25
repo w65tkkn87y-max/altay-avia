@@ -806,7 +806,14 @@
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.near = 1; sun.shadow.camera.far = 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
     scene.add(sun); this.sun = sun;
     const fill = new T.DirectionalLight(0xcfe3ff, 0.35); fill.position.set(-20, 8, -10); scene.add(fill);
-    if (opts.helipad) { this.pad = makeLandscape({ trees: opts.trees }); scene.add(this.pad); scene.fog = new T.Fog(opts.fogColor !== undefined ? opts.fogColor : 0xdcebff, 2200, 9000); }
+    if (opts.helipad) {
+      const S0 = opts.scene && global.Heli3D && global.Heli3D.scenes && global.Heli3D.scenes[opts.scene];
+      // дымка: у реальной площадки — воздушная перспектива (дальние хребты голубеют), у процедурной — как раньше
+      scene.fog = S0 ? new T.Fog(opts.fogColor !== undefined ? opts.fogColor : 0xcddcec, 500, 11000) : new T.Fog(opts.fogColor !== undefined ? opts.fogColor : 0xdcebff, 2200, 9000);
+      const S = opts.scene && global.Heli3D && global.Heli3D.scenes && global.Heli3D.scenes[opts.scene];
+      if (S) { this.pad = S.placeholder(); scene.add(this.pad); S.load(this, opts.sceneBase || 'scene/', opts.sceneVer); }   // реальная площадка (Карасук)
+      else { this.pad = makeLandscape({ trees: opts.trees }); scene.add(this.pad); }                                      // процедурный пейзаж
+    }
     this.viewOffsetX = opts.viewOffsetX || 0.5;   // доля ширины, где стоит цель (0.5 — центр)
     if (opts.shadowPlane !== false && !opts.helipad) { const sh = new T.Mesh(new T.PlaneGeometry(80, 80), new T.ShadowMaterial({ opacity: opts.shadowOpacity || 0.18 })); sh.rotation.x = -Math.PI / 2; sh.receiveShadow = true; scene.add(sh); }
     if (opts.dark && opts.fog !== false && !opts.helipad) { scene.fog = new T.Fog(opts.fogColor !== undefined ? opts.fogColor : 0x11244a, 20, 90); this._fog = true; }
@@ -825,10 +832,14 @@
     if (this.model) { this.rig.remove(this.model); disposeGroup(this.model); }
     this.model = model; this.rig.add(model);
     const b = model.userData.bounds || { length: 12, height: 3.5, width: 10, center: 0 };
-    this.orbit.target.set(view && view.tx !== undefined ? view.tx : (b.center || 0), (view && view.ty) || b.height * 0.42, 0);
+    // view.fitRef — габариты эталонного борта: камера одна для всех моделей, поэтому борта видны в истинном масштабе
+    this._fitRef = view && view.fitRef ? Object.assign({}, b, view.fitRef) : null;
+    const hb = this._fitRef || b;
+    const ty = view && view.tyRel ? hb.height * view.tyRel : (view && view.ty) || b.height * 0.42;   // tyRel — доля высоты модели (эталона)
+    this.orbit.target.set(view && view.tx !== undefined ? view.tx : (b.center || 0), ty, 0);
     /* fit:'auto' — дистанция по описанной сфере: модель целиком в кадре при любом угле поворота */
     this._autoFit = (view && view.fit === 'auto') ? (view.margin || 1.06) : 0;
-    const fit = this._autoFit ? this._fitDistance(b) : Math.max(b.length, b.width || 0) * (view && view.fit || 0.95);
+    const fit = this._autoFit ? this._fitDistance(hb) : Math.max(hb.length, hb.width || 0) * (view && view.fit || 0.95);
     this._bounds = b;
     this.orbit.dist = fit;
     if (view && view.theta !== undefined) this.orbit.theta = view.theta;
@@ -841,7 +852,7 @@
   };
   /* Общая обработка результата GLTFLoader: границы, поиск винтов по именам узлов, применение модели. */
   function onDoneGLTF(self, gltf, view, onDone) {
-    const m = gltf.scene; m.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+    const m = gltf.scene; m.traverse(o => { if (o.isMesh) { o.castShadow = !o.material.transparent; } });   // стекло тени не отбрасывает
     const box = new T.Box3().setFromObject(m); const size = box.getSize(new T.Vector3()); const c = box.getCenter(new T.Vector3());
     m.position.y -= box.min.y; m.position.x -= c.x; m.position.z -= c.z;
     m.userData.bounds = { length: size.x, height: size.y, width: size.z, center: 0, reach: Math.hypot(size.x, size.z) / 2 };
@@ -869,7 +880,16 @@
     const root = new T.Group(); root.name = 'PackedModel';
     const groups = {};
     Object.keys(data.pivots || {}).forEach(n => { const g = new T.Group(); g.name = n; g.position.fromArray(data.pivots[n]); root.add(g); groups[n] = g; });
-    const mat = new T.MeshStandardMaterial({ map: texture, metalness: 0.05, roughness: 0.42, side: T.DoubleSide });
+    // data.side === 'front' — модель из односторонних граней (AS350): обратные стороны отсекаются; иначе (Ми-8) — двусторонние
+    const mm = data.mat || {};   // data.mat — металлик/шероховатость краски модели (Ми-171 — «вишня металлик»)
+    const mat = new T.MeshStandardMaterial({ map: texture, metalness: mm.metalness !== undefined ? mm.metalness : 0.05, roughness: mm.roughness !== undefined ? mm.roughness : 0.42, side: data.side === 'front' ? T.FrontSide : T.DoubleSide });
+    // двусторонняя обшивка: изнанка (видна сквозь остекление кабины) — серая, как отделка салона, а не ливрея наружу
+    if (data.side !== 'front') mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n  if (!gl_FrontFacing) diffuseColor.rgb = vec3(0.075, 0.085, 0.09);'); };
+    let glass = null;   // md.m === 'glass': остекление кабины — тонированное, с отражениями неба, салон просвечивает
+    const gm = data.glass || {};   // data.glass — тонировка остекления модели (цвет/прозрачность), по умолчанию — тёмная, как у AS350
+    const glassMat = () => glass || (glass = new T.MeshStandardMaterial({ color: new T.Color(gm.color !== undefined ? gm.color : 0x0a1016).convertSRGBToLinear(), metalness: 0.35, roughness: 0.04, transparent: true, opacity: gm.opacity !== undefined ? gm.opacity : 0.8, envMapIntensity: 1.8, side: T.DoubleSide, depthWrite: false }));
+    let win = null;     // md.m === 'window': окна салона — непрозрачное тонированное стекло с отражениями неба
+    const winMat = () => win || (win = new T.MeshStandardMaterial({ color: new T.Color(0x16202b).convertSRGBToLinear(), metalness: 0.55, roughness: 0.07, envMapIntensity: 1.5, side: T.DoubleSide }));
     const al4 = n => (n + 3) & ~3;
     data.meshes.forEach(md => {
       const bin = b64ToBuffer(md.d), c = md.c, ni = md.i; let off = 0;
@@ -882,7 +902,9 @@
       g.setAttribute('normal', new T.BufferAttribute(nrm, 3, true));
       g.setAttribute('uv', new T.BufferAttribute(uv, 2, true));
       g.setIndex(new T.BufferAttribute(idx, 1));
-      const mesh = new T.Mesh(g, mat); mesh.name = md.n || ''; mesh.position.fromArray(md.o); mesh.scale.fromArray(md.s);
+      const isGlass = md.m === 'glass';
+      const mesh = new T.Mesh(g, isGlass ? glassMat() : md.m === 'window' ? winMat() : mat); mesh.name = md.n || ''; mesh.position.fromArray(md.o); mesh.scale.fromArray(md.s);
+      if (isGlass) { mesh.renderOrder = 2; mesh.castShadow = false; }
       (md.g && groups[md.g] ? groups[md.g] : root).add(mesh);
     });
     return root;
@@ -891,7 +913,9 @@
   Viewer.prototype.loadPacked = function (key, url, texBase, view, onDone) {
     const self = this;
     const build = data => {
-      const texUrl = texBase + data.tex;
+      // метка версии сборки: иначе браузер отдаст старую текстуру из кэша к новой геометрии
+      const ver = (url.match(/[?&]v=([^&]+)/) || [])[1] || (document.documentElement.dataset.v || '');
+      const texUrl = texBase + data.tex + (ver ? '?v=' + ver : '');
       const finish = tex => { try { onDoneGLTF(self, { scene: packedToGroup(data, tex) }, view, onDone); } catch (e) { onDone && onDone(e); } };
       if (_packedTex[texUrl]) return finish(_packedTex[texUrl]);
       const tex = new T.TextureLoader().load(texUrl, () => finish(tex), undefined, () => finish(tex));
@@ -953,7 +977,7 @@
     const t = this._offX();
     if (t !== 0.5) this.camera.setViewOffset(w * 2, h, (1 - t) * w, 0, w, h); else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
-    if (this._autoFit && this._bounds) this.orbit.dist = this._fitDistance(this._bounds);
+    if (this._autoFit && this._bounds) this.orbit.dist = this._fitDistance(this._fitRef || this._bounds);
   };
   Viewer.prototype._bindControls = function () {
     const el = this.renderer.domElement, o = this.orbit, self = this;
@@ -1001,9 +1025,17 @@
       }
       if (this.scrollP > 0) { const p = this.scrollP; rig.position.y += p * 9; rig.position.x += p * 6; rig.rotation.x -= p * 0.22; rig.rotation.z += p * 0.15; }
     }
+    if (this._sceneTick) this._sceneTick(this.clock.elapsedTime);
     this.renderer.render(this.scene, this.camera);
   };
   Viewer.prototype.setVisible = function (v) { this._visible = v; };
+  /* Сцена загружена (или не удалась — тогда процедурный пейзаж вместо временной земли) */
+  Viewer.prototype.setScene = function (grp) {
+    if (this.pad) { this.scene.remove(this.pad); disposeGroup(this.pad); }
+    this.pad = grp || makeLandscape({ trees: this.opts.trees });
+    this.scene.add(this.pad);
+    this._sceneTick = this.pad.userData.tick || null;
+  };
   Viewer.prototype.dispose = function () { this.running = false; this._ro.disconnect(); this.renderer.dispose(); };
   function disposeGroup(g) { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }

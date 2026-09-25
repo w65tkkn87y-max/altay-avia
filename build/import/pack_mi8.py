@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Сборка Ми-8АМТ «АлтайАвиа» из модели Mil Mi-8AMTSh (Sketchfab, 42manako, CC BY 4.0):
-   удаление вооружения и военного оборудования, единая запечённая текстура ливреи,
+   удаление вооружения и военного оборудования (список — в mi8_geom.py), единая текстура ливреи,
    приведение к метрам/осям сайта (нос +X, верх +Y, земля y=0), квантование (KHR_mesh_quantization),
    узлы винтов MainRotor / TailRotor для анимации.
    python3 build/import/pack_mi8.py build/import/mi8amtsh/scene.gltf build/import/mi8amt_texture.png site/models/mi8amt.glb
@@ -10,71 +10,14 @@ import json, struct, sys, os, math
 import numpy as np
 
 SRC, TEX, DST = sys.argv[1:4]
-SCALE = 147.0                       # единицы модели → метры
-DELETE = ['object_004_0', 'object_029_0', 'object_040_0', 'object_041_0', 'object_042_0', 'object_053_0', 'object_054_0',
-          'object_077_0', 'object_078_0', 'object9_0', 'object11_0', 'object_000_0', 'object_013_0', 'object_014_0', 'object_015_0']
-MAIN_ROTOR = ['object_025_0', 'sub0191_0', 'sub0292_0', 'object_024_0', 'object_021_0', 'object_022_0', 'object_026_0', 'object_027_0']
-TAIL_ROTOR = ['object_020_0', 'object_019_0', 'object_017_0', 'object_018_0']
-
-base = os.path.dirname(SRC)
-js = json.load(open(SRC, encoding='utf-8'))
-buf = open(os.path.join(base, js['buffers'][0]['uri']), 'rb').read()
-acc, bvs, nodes, meshes = js['accessors'], js['bufferViews'], js['nodes'], js['meshes']
-CT = {5120: ('b', 1), 5121: ('B', 1), 5122: ('h', 2), 5123: ('H', 2), 5125: ('I', 4), 5126: ('f', 4)}
-NC = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
-
-def read(i):
-    a = acc[i]; v = bvs[a['bufferView']]; off = v.get('byteOffset', 0) + a.get('byteOffset', 0)
-    fmt, sz = CT[a['componentType']]; n = NC[a['type']]; stride = v.get('byteStride', sz * n)
-    dt = np.dtype('<' + fmt)
-    if stride == sz * n:
-        return np.frombuffer(buf, dt, a['count'] * n, off).reshape(a['count'], n).astype(np.float64 if fmt == 'f' else np.int64)
-    out = np.empty((a['count'], n), np.float64)
-    for k in range(a['count']): out[k] = struct.unpack_from('<' + fmt * n, buf, off + k * stride)
-    return out
-
-def local_matrix(n):
-    if 'matrix' in n: return np.array(n['matrix'], float).reshape(4, 4).T
-    t = n.get('translation', [0, 0, 0]); x, y, z, w = n.get('rotation', [0, 0, 0, 1]); s = n.get('scale', [1, 1, 1])
-    R = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)], [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)], [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
-    M = np.eye(4); M[:3, :3] = R * np.array(s); M[:3, 3] = t; return M
-
-# мировые матрицы + родители
-world = [None] * len(nodes); parent = {}
-def walk(i, M):
-    world[i] = M @ local_matrix(nodes[i])
-    for c in nodes[i].get('children', []): parent[c] = i; walk(c, world[i])
-for r in js['scenes'][0]['nodes']: walk(r, np.eye(4))
-def group_name(i):  # имя «объекта» (родителя mesh-узла)
-    n = nodes[i]; p = parent.get(i)
-    return n.get('name', '') if 'mesh' not in n or p is None else nodes[p].get('name', n.get('name', ''))
-
-# итоговое преобразование: масштаб, поворот +90° вокруг Y (нос +Z → +X)
-Ry = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]], float)
-prims = []  # (group, positions(m), normals, uvs, indices)
-for i, n in enumerate(nodes):
-    if 'mesh' not in n: continue
-    g = group_name(i)
-    if g in DELETE: continue
-    W = world[i]; L = Ry @ (W[:3, :3] * SCALE); Nm = np.linalg.inv(L).T
-    for p in meshes[n['mesh']]['primitives']:
-        P = read(p['attributes']['POSITION']) @ L.T + (Ry @ W[:3, 3] * SCALE)
-        N = read(p['attributes']['NORMAL']) @ Nm.T; N /= np.linalg.norm(N, axis=1, keepdims=True) + 1e-9
-        UV = read(p['attributes']['TEXCOORD_0']); UV = UV - np.floor(UV)
-        I = read(p['indices'])[:, 0].astype(np.int64)
-        prims.append([g, P, N, UV, I])
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mi8_geom
+G = mi8_geom.load(SRC)
+prims, main_c, tail_c = G['prims'], G['main_c'], G['tail_c']
+mi8_geom.apply_gear_palette(prims)          # стойки / шины / диски — плашки палитры (краска в livery_mi8.py)
+MAIN_ROTOR, TAIL_ROTOR = mi8_geom.MAIN_ROTOR, mi8_geom.TAIL_ROTOR
 allP = np.vstack([p[1] for p in prims]); mn, mx = allP.min(0), allP.max(0)
-# на землю и по центру: фюзеляж по оси z=0 (центр модели x≈0.9 → после поворота z=-0.9)
-shift = np.array([0.0, -mn[1], 0.9])
-for p in prims: p[1] = p[1] + shift
-allP += shift; mn, mx = allP.min(0), allP.max(0)
 print('габариты, м: %.2f × %.2f × %.2f' % tuple(mx - mn), 'треугольников:', sum(len(p[4]) // 3 for p in prims))
-
-# группы для винтов: центр вращения — центр втулки
-def center_of(names):
-    pts = np.vstack([p[1] for p in prims if p[0] in names]); return (pts.min(0) + pts.max(0)) / 2
-main_c = center_of(['object_021_0', 'object_022_0']); main_c[1] = 0   # ось Y через центр втулки НВ
-tail_c = center_of(['object_019_0'])                                   # втулка РВ (плоскость винта смещена от оси фюзеляжа)
 print('MainRotor центр', main_c.round(2), 'TailRotor центр', tail_c.round(2))
 
 # --- сборка glTF: квантование, один материал с запечённой текстурой ---
