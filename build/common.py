@@ -166,7 +166,7 @@ def model_credits():
 def page(*, root, title, desc, active, body, scripts_3d=False, extra_head='', canonical='', models=(), body_class=''):
     three = ''
     if scripts_3d:
-        three = ('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'
+        three = (f'<script src="{root}js/vendor/three.min.js"></script>'
                  f'<script src="{root}js/heli3d.js?v={BUILD_V}" defer></script><script src="{root}js/karasuk.js?v={BUILD_V}" defer></script>'
                  f'<script src="{root}js/fleet.js?v={BUILD_V}" defer></script>')
     intro = ('<div class="preloader" aria-hidden="true"><div class="pl-inner">'
