@@ -628,9 +628,27 @@
   /* ============================================================
      ОКРУЖЕНИЕ: небо для отражений, площадка
      ============================================================ */
-  function makeEnvironment(renderer) {
+  function makeEnvironment(renderer, outdoor) {
     const pm = new T.PMREMGenerator(renderer);
     const sc = new T.Scene();
+    if (outdoor) {
+      /* под открытым небом: голубое небо, дымка у горизонта, полоса лесистых гор, трава и бетон внизу, солнце */
+      const g = new T.SphereGeometry(50, 64, 32), pa = g.attributes.position, cols = [], c = new T.Color();
+      const zen = new T.Color(0x3a7cc8), hor = new T.Color(0xc4d6e8), mtn = new T.Color(0x4f6b4a), grass = new T.Color(0x7c8f5c), conc = new T.Color(0xa7adb3);
+      for (let i = 0; i < pa.count; i++) {
+        const y = pa.getY(i) / 50, ang = Math.atan2(pa.getZ(i), pa.getX(i));
+        const ridge = 0.06 + 0.05 * Math.sin(ang * 3.1) + 0.03 * Math.sin(ang * 7.3 + 1);
+        if (y > ridge) c.copy(hor).lerp(zen, Math.pow(Math.min(1, (y - ridge) / 0.9), 0.55));
+        else if (y > 0) c.copy(mtn).lerp(hor, Math.pow(y / ridge, 2.2) * 0.6);
+        else c.copy(grass).lerp(conc, Math.min(1, -y * 2.2));
+        cols.push(c.r, c.g, c.b);
+      }
+      g.setAttribute('color', new T.Float32BufferAttribute(cols, 3));
+      sc.add(new T.Mesh(g, new T.MeshBasicMaterial({ side: T.BackSide, vertexColors: true })));
+      const sun = new T.Mesh(new T.SphereGeometry(2.2, 16, 8), new T.MeshBasicMaterial({ color: new T.Color(7, 6.5, 5.6) }));
+      sun.position.set(18, 30, 14).normalize().multiplyScalar(44); sc.add(sun);
+      const tex = pm.fromScene(sc, 0.03).texture; pm.dispose(); return tex;
+    }
     const skyGeo = new T.SphereGeometry(50, 48, 24);
     const top = new T.Color(0x86b9ea), horizon = new T.Color(0xeaf1f7), ground = new T.Color(0x9aa5b1);
     const pa = skyGeo.attributes.position, cols = [], tmp = new T.Color();
@@ -789,7 +807,7 @@
     const renderer = new T.WebGLRenderer({ antialias: true, alpha: !!opts.transparent, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.maxDpr || 2));
     renderer.setSize(w, h);
-    renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = opts.exposure || 1.0;
+    renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = opts.exposure || (opts.scene ? 0.9 : 1.0);
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
     Object.assign(renderer.domElement.style, { display: 'block', width: '100%', height: '100%' });
@@ -797,13 +815,14 @@
 
     const scene = new T.Scene();
     if (!opts.transparent) scene.background = new T.Color(opts.background || 0xeaf1f7);
-    scene.environment = makeEnvironment(renderer);
+    scene.environment = makeEnvironment(renderer, !!(opts.helipad && opts.scene));
     this.scene = scene;
     this.camera = new T.PerspectiveCamera(opts.fov || 30, w / h, 0.1, opts.helipad ? 14000 : 500);
 
     scene.add(new T.HemisphereLight(0xdbe9f7, 0x8a94a0, 0.5));
-    const sun = new T.DirectionalLight(0xfff3e0, 1.3); sun.position.set(18, 30, 14); sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.near = 1; sun.shadow.camera.far = 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+    const sun = new T.DirectionalLight(0xfff3e0, 1.3); sun.position.set(18, 30, 14).multiplyScalar(opts.scene ? 3 : 1); sun.castShadow = true;
+    const smap = opts.scene ? (opts.lowTex ? 2048 : 4096) : 2048;
+    sun.shadow.mapSize.set(smap, smap); sun.shadow.camera.near = 1; sun.shadow.camera.far = opts.scene ? 260 : 120; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
     scene.add(sun); this.sun = sun;
     const fill = new T.DirectionalLight(0xcfe3ff, 0.35); fill.position.set(-20, 8, -10); scene.add(fill);
     if (opts.helipad) {
@@ -845,7 +864,8 @@
     if (view && view.theta !== undefined) this.orbit.theta = view.theta;
     if (view && view.phi !== undefined) this.orbit.phi = view.phi;
     if (this._fog) { this.scene.fog.near = fit * 1.1; this.scene.fog.far = fit * 4.2; }
-    const s = this.sun.shadow.camera; s.left = -b.length * 0.8; s.right = b.length * 0.8; s.top = b.length * 0.8; s.bottom = -b.length * 0.8; s.updateProjectionMatrix();
+    const sr = this.opts.scene ? 52 : b.length * 0.8;   // на площадке «Карасук» тень захватывает и ближние ангары
+    const s = this.sun.shadow.camera; s.left = -sr; s.right = sr; s.top = sr; s.bottom = -sr; s.updateProjectionMatrix();
     this.setRotorState(this.rotorState);
     this._first = true;
     return this;
@@ -869,7 +889,40 @@
       rotors.push({ obj: o, axis: tail ? 'z' : 'y', dir: 1, disc, rpm: tail ? 1100 : 300 });
     });
     m.userData.rotors = rotors;
+    const main = rotors.find(r => r.axis === 'y');
+    if (main) main.droop = makeDroop(main.obj);
     return m;
+  }
+  /* Прогиб лопастей: на стоянке концы провисают (у Ми-8 — около полуметра), на малом газе меньше,
+     на взлётном режиме лопасти выпрямляются и чуть поднимаются (конус). Геометрия переводится в float-координаты винта. */
+  function makeDroop(rotor) {
+    const items = []; let R = 0;
+    rotor.updateMatrixWorld(true);
+    const inv = new T.Matrix4().copy(rotor.matrixWorld).invert(), v = new T.Vector3();
+    rotor.traverse(o => {
+      if (!o.isMesh) return;
+      const g = o.geometry, pa = g.attributes.position, n = pa.count, f = new Float32Array(n * 3);
+      const M = new T.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+      for (let i = 0; i < n; i++) { v.fromBufferAttribute(pa, i).applyMatrix4(M); f[i * 3] = v.x; f[i * 3 + 1] = v.y; f[i * 3 + 2] = v.z; R = Math.max(R, Math.hypot(v.x, v.z)); }
+      const inW = new T.Matrix4().copy(o.matrixWorld).invert().multiply(rotor.matrixWorld);   // обратно в систему меша
+      items.push({ o, f, base: f.slice(), inW });
+    });
+    if (!R) return null;
+    items.forEach(it => {
+      const { o, f } = it; o.updateMatrix(); o.position.set(0, 0, 0); o.scale.set(1, 1, 1); o.rotation.set(0, 0, 0); o.updateMatrix();
+      if (o.parent !== rotor) { rotor.attach ? rotor.attach(o) : rotor.add(o); o.position.set(0, 0, 0); o.scale.set(1, 1, 1); o.rotation.set(0, 0, 0); }
+      o.geometry.setAttribute('position', new T.BufferAttribute(f, 3)); o.geometry.computeBoundingSphere();
+      it.w = new Float32Array(f.length / 3);
+      for (let i = 0; i < it.w.length; i++) { const r = Math.hypot(it.base[i * 3], it.base[i * 3 + 2]) / R; it.w[i] = r > 0.12 ? Math.pow((r - 0.12) / 0.88, 1.8) : 0; }
+    });
+    return { items, amp: 0.004 * R * R, k: 1, target: 1 };   // Ми-8 (R 10.6 м) — ~0.45 м, AS350 (R 5.3 м) — ~0.11 м
+  }
+  function applyDroop(d, dt, state) {
+    d.target = state === 'fast' ? -0.35 : state === 'idle' ? 0.55 : 1;
+    const nk = d.k + (d.target - d.k) * Math.min(1, dt * 1.2);
+    if (Math.abs(nk - d.k) < 0.0008 && d.applied) return;
+    d.k = nk; d.applied = true;
+    d.items.forEach(it => { const pa = it.o.geometry.attributes.position, a = pa.array; for (let i = 0; i < it.w.length; i++) a[i * 3 + 1] = it.base[i * 3 + 1] - it.w[i] * d.amp * d.k; pa.needsUpdate = true; });
   }
 
   /* Компактный формат моделей сайта (build/import/glb2js.py): обычный <script src="models/<key>.js">,
@@ -880,13 +933,17 @@
     for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
     return u8.buffer;
   }
-  function packedToGroup(data, texture) {
+  function packedToGroup(data, texture, orm, lowTex) {
     const root = new T.Group(); root.name = 'PackedModel';
     const groups = {};
     Object.keys(data.pivots || {}).forEach(n => { const g = new T.Group(); g.name = n; g.position.fromArray(data.pivots[n]); root.add(g); groups[n] = g; });
     // data.side === 'front' — модель из односторонних граней (AS350): обратные стороны отсекаются; иначе (Ми-8) — двусторонние
     const mm = data.mat || {};   // data.mat — металлик/шероховатость краски модели (Ми-171 — «вишня металлик»)
-    const mat = new T.MeshStandardMaterial({ map: texture, metalness: mm.metalness !== undefined ? mm.metalness : 0.05, roughness: mm.roughness !== undefined ? mm.roughness : 0.42, side: data.side === 'front' ? T.FrontSide : T.DoubleSide });
+    const mo = { map: texture, metalness: mm.metalness !== undefined ? mm.metalness : 0.05, roughness: mm.roughness !== undefined ? mm.roughness : 0.42, side: data.side === 'front' ? T.FrontSide : T.DoubleSide };
+    // карта материалов (R — лак, G — шероховатость, B — металличность): резина матовая, краска под лаком, металл блестит
+    if (orm) Object.assign(mo, { roughnessMap: orm, metalnessMap: orm, roughness: 1, metalness: 1 });
+    if (orm) mo.envMapIntensity = 0.8;
+    const mat = orm && !lowTex ? new T.MeshPhysicalMaterial(Object.assign(mo, { clearcoat: 0.6, clearcoatRoughness: 0.12, clearcoatMap: orm })) : new T.MeshStandardMaterial(mo);
     // двусторонняя обшивка: изнанка (видна сквозь остекление кабины) — серая, как отделка салона, а не ливрея наружу
     if (data.side !== 'front') mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n  if (!gl_FrontFacing) diffuseColor.rgb = vec3(0.075, 0.085, 0.09);'); };
     let glass = null;   // md.m === 'glass': остекление кабины — тонированное, с отражениями неба, салон просвечивает
@@ -933,28 +990,34 @@
     const name = low && data.tex2k ? data.tex2k : data.tex;
     return texBase + name + (ver ? '?v=' + ver : '');
   }
-  function loadPackedTex(texUrl, cb) {
+  function loadPackedTex(texUrl, cb, linear) {
+    if (!texUrl) return cb(null);
     const c = _packedTex[texUrl];
     if (c) { if (c.ready) cb(c.tex); else c.wait.push(cb); return; }
     const e = _packedTex[texUrl] = { ready: false, wait: [cb], tex: null };
     const done = () => { e.ready = true; e.wait.splice(0).forEach(f => f(e.tex)); };
     e.tex = new T.TextureLoader().load(texUrl, done, undefined, done);
-    e.tex.flipY = false; e.tex.encoding = T.sRGBEncoding; e.tex.wrapS = e.tex.wrapT = T.RepeatWrapping; e.tex.anisotropy = 8;
+    e.tex.flipY = false; e.tex.encoding = linear ? T.LinearEncoding : T.sRGBEncoding; e.tex.wrapS = e.tex.wrapT = T.RepeatWrapping; e.tex.anisotropy = 8;
+  }
+  function ormUrlFor(data, url, texBase) {
+    if (!data.orm) return null;
+    const ver = (url.match(/[?&]v=([^&]+)/) || [])[1] || (document.documentElement.dataset.v || '');
+    return texBase + data.orm + (ver ? '?v=' + ver : '');
   }
   /* Только скачать (без построения) — для упреждающей загрузки соседних бортов */
   function prefetchPacked(key, url, texBase, low) {
-    loadPackedData(key, url, (err, data) => { if (!err) loadPackedTex(texUrlFor(data, url, texBase, low), () => { }); });
+    loadPackedData(key, url, (err, data) => { if (!err) { loadPackedTex(texUrlFor(data, url, texBase, low), () => { }); loadPackedTex(ormUrlFor(data, url, texBase), () => { }, true); } });
   }
   Viewer.prototype.getPacked = function (key, url, texBase, cb) {
     const self = this, cache = this._models || (this._models = {});
     if (cache[key]) return cb(null, cache[key]);
     loadPackedData(key, url, (err, data) => {
       if (err) return cb(err);
-      loadPackedTex(texUrlFor(data, url, texBase, self.opts.lowTex), tex => {
+      loadPackedTex(texUrlFor(data, url, texBase, self.opts.lowTex), tex => loadPackedTex(ormUrlFor(data, url, texBase), orm => {
         if (cache[key]) return cb(null, cache[key]);
-        try { const m = prepModel(packedToGroup(data, tex)); m.userData.cached = true; m.userData.key = key; cache[key] = m; cb(null, m); }
+        try { const m = prepModel(packedToGroup(data, tex, orm, self.opts.lowTex)); m.userData.cached = true; m.userData.key = key; cache[key] = m; cb(null, m); }
         catch (e) { cb(e); }
-      });
+      }, true));
     });
   };
   Viewer.prototype.loadPacked = function (key, url, texBase, view, onDone) {
@@ -1094,7 +1157,7 @@
     this.camera.lookAt(o.target);
     if (this.model) {
       const rate = this.rotorState === 'fast' ? 1 : this.rotorState === 'idle' ? 0.06 : 0;
-      (this.model.userData.rotors || []).forEach(r => { const w = r.rpm / 60 * Math.PI * 2 * rate * dt * r.dir; if (r.axis === 'y') r.obj.rotation.y += w; else r.obj.rotation.z += w; });
+      (this.model.userData.rotors || []).forEach(r => { const w = r.rpm / 60 * Math.PI * 2 * rate * dt * r.dir; if (r.axis === 'y') r.obj.rotation.y += w; else r.obj.rotation.z += w; if (r.droop) applyDroop(r.droop, dt, this.rotorState); });
       const t = this.clock.elapsedTime;
       const rig = this.rig;
       if (this.swap) this._swapStep(dt, rig);
@@ -1112,7 +1175,7 @@
       }
       if (this.scrollP > 0) { const p = this.scrollP; rig.position.y += p * 9; rig.position.x += p * 6; rig.rotation.x -= p * 0.22; rig.rotation.z += p * 0.15; }
     }
-    if (this._sceneTick) this._sceneTick(this.clock.elapsedTime);
+    if (this._sceneTick) this._sceneTick(this.clock.elapsedTime, this.camera, this.orbit.target);
     this.renderer.render(this.scene, this.camera);
   };
   Viewer.prototype.setVisible = function (v) { this._visible = v; };

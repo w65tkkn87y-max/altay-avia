@@ -189,23 +189,12 @@ def build_ekskursii():
 
 # ---------------------------------------------------------------- Площадки
 def karasuk_map(root):
-    return f'''<div class="map-box" aria-label="Схема расположения площадки «Карасук»">
-  <svg viewBox="0 0 600 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#2E86DE" stroke-opacity=".18"/></pattern></defs>
-    <rect width="600" height="420" fill="#0E2244"/><rect width="600" height="420" fill="url(#grid)"/>
-    <g fill="none" stroke="#5AA7F0" stroke-opacity=".35"><path d="M-20 300c80-40 140-10 210-60s120-120 220-110 150 60 210 40"/><path d="M-20 340c80-40 140-10 210-60s120-120 220-110 150 60 210 40"/><path d="M-20 260c80-40 140-10 210-60s120-120 220-110 150 60 210 40"/></g>
-    <path d="M40 420C120 330 160 300 230 250S330 160 420 120s110-60 180-70" fill="none" stroke="#7FC0FF" stroke-width="7" stroke-linecap="round" opacity=".8"/>
-    <text x="300" y="196" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12" transform="rotate(-38 300 196)">р. Катунь</text>
-    <path d="M0 400C150 380 260 330 330 300s160-90 270-80" fill="none" stroke="#F2C230" stroke-width="2" stroke-dasharray="2 8" opacity=".9"/>
-    <text x="420" y="240" fill="#F2C230" font-family="Oswald, Arial Narrow, sans-serif" font-size="11" letter-spacing="1">Чуйский тракт</text>
-    <g transform="translate(270 262)"><circle r="38" fill="none" stroke="#F2C230" stroke-width="3"/><circle r="52" fill="none" stroke="#F2C230" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="4 6"/><text y="10" text-anchor="middle" fill="#F2C230" font-family="Unbounded, Arial, sans-serif" font-size="34" font-weight="800">H</text></g>
-    <text x="270" y="335" text-anchor="middle" fill="#fff" font-family="Unbounded, Arial, sans-serif" font-size="16" font-weight="700">Площадка «Карасук»</text>
-    <text x="270" y="354" text-anchor="middle" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12">51°33′36″ N · 085°55′03″ E</text>
-    <text x="470" y="70" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12">с. Чепош ↗</text>
-    <text x="60" y="60" fill="#BFE0FF" font-family="Oswald, Arial Narrow, sans-serif" font-size="12">Горно-Алтайск ↖ 60 км</text>
-    <g transform="translate(540 370)" fill="none" stroke="#fff" stroke-opacity=".7"><circle r="18"/><path d="M0-18v36M-18 0h36"/><path d="M0-18l5 10h-10z" fill="#fff"/></g>
-  </svg>
-  <div class="map-links"><a href="https://yandex.ru/maps/?pt=85.9175,51.56&z=13&l=map" target="_blank" rel="noopener">Яндекс Карты</a><a href="https://2gis.ru/geo/85.9175,51.56" target="_blank" rel="noopener">2ГИС</a><a href="https://www.google.com/maps?q=51.56,85.9175" target="_blank" rel="noopener">Google Maps</a></div>
+    """Карта по реальным данным (build/terrain/map_karasuk.py): рельеф/снимок, Катунь, тракты, сёла, направление на Горно-Алтайск."""
+    svg = open(os.path.join(ROOT, 'build', 'terrain', 'karasuk_map.svg'), encoding='utf-8').read().replace('__ROOT__', root)
+    return f'''<div class="map-box" data-map>
+  {svg}
+  <div class="map-mode" role="group" aria-label="Вид карты"><button type="button" data-map-mode="relief" aria-pressed="true">Схема</button><button type="button" data-map-mode="sat" aria-pressed="false">Снимок</button></div>
+  <div class="map-links"><a href="https://yandex.ru/maps/?pt=85.9176,51.5607&z=13&l=map" target="_blank" rel="noopener">Яндекс Карты</a><a href="https://2gis.ru/geo/85.9176,51.5607" target="_blank" rel="noopener">2ГИС</a><a href="https://yandex.ru/maps/?rtext=51.957775,85.963653~51.5607,85.9176&rtt=auto" target="_blank" rel="noopener">Маршрут из Горно-Алтайска</a></div>
 </div>'''
 
 def build_ploshchadki():

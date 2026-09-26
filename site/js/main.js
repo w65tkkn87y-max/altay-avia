@@ -328,6 +328,12 @@
     list.classList.add('is-in');
   });
 
+  /* ---------- Карта площадки: «Схема / Снимок», прорисовка тракта при появлении ---------- */
+  D.querySelectorAll('[data-map]').forEach(box => {
+    box.addEventListener('click', e => { const b = e.target.closest('[data-map-mode]'); if (!b) return; box.classList.toggle('is-sat', b.dataset.mapMode === 'sat'); box.querySelectorAll('[data-map-mode]').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); });
+    if ('IntersectionObserver' in W && !REDUCED) { const o = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) { requestAnimationFrame(() => box.classList.add('is-drawn')); o.disconnect(); } }), { threshold: .3 }); o.observe(box); } else box.classList.add('is-drawn');
+  });
+
   /* ---------- Лайтбокс галереи ---------- */
   const lbLinks = Array.from(D.querySelectorAll('a[data-lightbox]'));
   if (lbLinks.length) {

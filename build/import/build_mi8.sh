@@ -15,6 +15,7 @@ for L in ${@:-mi8amt mi171}; do
   python3 build/import/mi8_extras.py $L
   python3 -c "from PIL import Image; Image.open('build/import/${L}_texture.jpg').save('site/models/${L}.jpg', quality=84, optimize=True, progressive=True)"
   npx -y @gltf-transform/cli@4 meshopt --level medium build/import/${L}_s.glb site/models/${L}.glb
+  cp build/import/${L}_orm.png site/models/${L}_orm.png
   python3 build/import/make_tex2k.py $L          # текстура 2048 px для телефонов
   rm -f build/import/${L}_f.glb build/import/${L}_s.glb site/models/${L}.json
 done

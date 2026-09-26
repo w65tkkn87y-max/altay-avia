@@ -259,8 +259,9 @@ def build(key):
             P3, N3 = patch(proj, (cx, cy), side, rings, disc_tris(rings[:-1]), 0.008)
             for p, n in zip(P3, N3): glass.add(p, n, np.tile(uv_frame, (3, 1)))
     import mi8_nose
-    nf, nw = mi8_nose.parts(G, np.array(mi8_geom.pal_uv('frame' if key == 'mi171' else 'strut')), Part)
-    parts = [frame, glass, cockpit_glass(G), nf, nw, exhausts()]
+    parts = [frame, glass, cockpit_glass(G), exhausts()]
+    if key == 'mi171':   # нижнее остекление носа — только у Ми-171 (у Ми-8АМТ нос — сплошной обтекатель радара)
+        nf, nw = mi8_nose.parts(G, np.array(mi8_geom.pal_uv('frame')), Part); parts += [nf, nw]
     if key == 'mi171': parts.append(radome())
     return parts
 
@@ -273,9 +274,9 @@ def main(key):
     for part in build(key):
         m, t, b = pack_mesh(part, np.zeros(3)); data['meshes'].append(m)
         print('  %s: треугольников %d' % (part.name, t))
-    if key == 'mi171': data['mat'] = {'metalness': 0.45, 'roughness': 0.3}     # «вишня металлик»
-    else: data.pop('mat', None)
     data['glass'] = {'color': 0x0c1318, 'opacity': 0.5}                          # остекление кабины: салон просвечивает, как на фото
+    data['orm'] = key + '_orm.png'                                                # лак / шероховатость / металличность по деталям (livery_mi8.py)
+    data.pop('mat', None)
     out = s[:s.index(head)] + head + json.dumps(data, separators=(',', ':')) + ';\n'
     open(path, 'w', encoding='utf-8').write(out)
     print('записано', path, '%.2f МБ' % (len(out.encode()) / 1e6))

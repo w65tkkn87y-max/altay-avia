@@ -119,17 +119,18 @@
     grassTex = ctex(c, true); grassTex.anisotropy = 16;
     return grassTex;
   }
-  function grassTufts(d) {
+  function grassTufts(d, cx, cz) {
     // кустики травы вокруг большой площадки (не на бетоне): 8 травинок от тёмного основания к светлым кончикам,
     // нормали «вверх» — освещены как земля, поэтому сливаются с лугом и дают объём у самой земли
     const rects = [];
     d.pads.forEach(p => rects.push([p.x - p.s / 2 - 0.3, p.x + p.s / 2 + 0.3, p.z - p.s / 2 - 0.3, p.z + p.s / 2 + 0.3]));
     d.taxiways.forEach(([a, b, w]) => rects.push([Math.min(a[0], b[0]) - w / 2 - 0.2, Math.max(a[0], b[0]) + w / 2 + 0.2, Math.min(a[1], b[1]) - w / 2 - 0.2, Math.max(a[1], b[1]) + w / 2 + 0.2]));
     rects.push([d.apron.x[0] - 1, d.apron.x[1] + 0.5, d.apron.z[0] - 0.5, d.apron.z[1] + 0.5]);
+    d.hangars.forEach(h => rects.push([h.x[0] - 1, h.x[1] + 1, h.z[0] - 1, h.z[1] + 1]));
     const onConcrete = (x, z) => rects.some(q => x > q[0] && x < q[1] && z > q[2] && z < q[3]);
     const N = MOBILE ? 9000 : 32000, R = MOBILE ? 28 : 44, r = rng(47), list = [];
     for (let i = 0; i < N * 4 && list.length < N; i++) {
-      const a = r() * Math.PI * 2, dd = Math.sqrt(r()) * R, x = Math.cos(a) * dd, z = Math.sin(a) * dd;
+      const a = r() * Math.PI * 2, dd = Math.sqrt(r()) * R, x = (cx || 0) + Math.cos(a) * dd, z = (cz || 0) + Math.sin(a) * dd;
       const edge = Math.min(1, Math.max(0, (dd - R * 0.5) / (R * 0.5)));          // к краю реже и мельче — без видимой границы
       if (r() < 1 - edge * edge * (3 - 2 * edge) && !onConcrete(x, z)) list.push([x, z, 1 - 0.45 * edge]);
     }
@@ -199,15 +200,15 @@
     g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('uv', new T.BufferAttribute(uv, 2));
     g.setIndex(new T.BufferAttribute(idx, 1)); g.computeVertexNormals(); g.computeBoundingSphere();
     const U = { nearMap: { value: tex.near }, waterMap: { value: tex.water }, detailMap: { value: detailTexture() }, grassMap: { value: grassTexture() }, meadowMap: { value: meadowTexture() }, grassMean: { value: grassMean }, meadowMean: { value: meadowMean },
-                uNear: { value: d.near }, uTime: { value: 0 }, uWater: { value: lin(0x5aa39d) }, uWaterDeep: { value: lin(0x2f6f73) } };
+                uNear: { value: d.near }, uOrigin: { value: new T.Vector2(0, 0) }, uTime: { value: 0 }, uWater: { value: lin(0x5aa39d) }, uWaterDeep: { value: lin(0x2f6f73) } };
     const m = new T.MeshStandardMaterial({ map: tex.sat, roughness: 0.94, metalness: 0, envMapIntensity: 0.55 });
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = 'varying vec3 vWPos;\nuniform sampler2D nearMap, waterMap, detailMap, grassMap, meadowMap;\nuniform vec3 grassMean, meadowMean;\nuniform float uNear, uTime;\nuniform vec3 uWater, uWaterDeep;\nfloat kWat = 0.0;\n' +
+      sh.fragmentShader = 'varying vec3 vWPos;\nuniform sampler2D nearMap, waterMap, detailMap, grassMap, meadowMap;\nuniform vec3 grassMean, meadowMean;\nuniform float uNear, uTime;\nuniform vec2 uOrigin;\nuniform vec3 uWater, uWaterDeep;\nfloat kWat = 0.0;\n' +
         sh.fragmentShader.replace('#include <map_fragment>', `
   vec3 col = mapTexelToLinear(texture2D(map, vUv)).rgb;
-  vec2 nUv = (vWPos.xz + uNear) / (2.0 * uNear);
+  vec2 nUv = (vWPos.xz - uOrigin + uNear) / (2.0 * uNear);
   float fN = smoothstep(0.0, 0.12, min(min(nUv.x, 1.0 - nUv.x), min(nUv.y, 1.0 - nUv.y)));
   if (fN > 0.0) col = mix(col, sRGBToLinear(texture2D(nearMap, clamp(nUv, 0.0, 1.0))).rgb, fN);
   float camD = distance(vWPos, cameraPosition);
@@ -251,7 +252,7 @@
   }`);
     };
     const mesh = new T.Mesh(g, m); mesh.receiveShadow = true; mesh.name = 'terrain';
-    mesh.userData.tick = t => { U.uTime.value = t; };
+    mesh.userData.tick = t => { U.uTime.value = t; }; mesh.userData.U = U;
     return mesh;
   }
 
@@ -341,6 +342,81 @@
       const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, u0 + uv.getX(i) * (u1 - u0)); return g; };
     return merge([{ g: q(0), c: new T.Color(1, 1, 1), up: true }, { g: q(1), c: new T.Color(1, 1, 1), up: true }]);
   }
+  /* ---------- ближние деревья: нарисованные сосна, ель/кедр, берёза на трёх пересекающихся плоскостях ---------- */
+  let treeAtlas = null;
+  function treeAtlasTexture() {
+    if (treeAtlas) return treeAtlas;
+    const CW = 512, CH = 1024, c = canvas(CW * 3, CH), g = c.getContext('2d'), r = rng(77);
+    g.clearRect(0, 0, c.width, c.height);
+    const rgb = (h, k, a) => { const m = h.match(/\w\w/g).map(v => Math.min(255, Math.round(parseInt(v, 16) * k))); return 'rgba(' + m.join(',') + ',' + (a === undefined ? 1 : a) + ')'; };
+    const needles = (x, y, R, base, n, up) => {   // пучок хвои: тёмная середина, светлый верх, штрихи-иголки по краю
+      for (let i = 0; i < n; i++) {
+        const a = r() * Math.PI * 2, d = Math.sqrt(r()) * R, px = x + Math.cos(a) * d * 1.35, py = y + Math.sin(a) * d * 0.62;
+        const lit = 0.55 + 0.75 * Math.max(0, (y - py) / R * 0.5 + 0.5) * (up || 1) + (r() - 0.5) * 0.25;
+        g.strokeStyle = rgb(base, lit, 0.9); g.lineWidth = 1.1 + r() * 1.3; const L = 4 + r() * 7, b = a + (r() - 0.5) * 1.2;
+        g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(b) * L, py + Math.sin(b) * L * 0.8); g.stroke();
+      }
+    };
+    // --- сосна обыкновенная (ячейка 0): высокий рыжий ствол, рваная плоская крона из пучков в верхней трети
+    {
+      const ox = CW / 2;
+      const trunk = (x0, y0, x1, y1, w0, w1, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(x0 - w0, y0); g.lineTo(x1 - w1, y1); g.lineTo(x1 + w1, y1); g.lineTo(x0 + w0, y0); g.closePath(); g.fill(); };
+      trunk(ox, CH, ox + 6, 700, 13, 10, '#5b4a3c'); trunk(ox + 6, 702, ox - 4, 250, 10, 5, '#9a5e37'); trunk(ox - 4, 252, ox + 2, 120, 5, 2.5, '#a8683c');
+      g.fillStyle = 'rgba(40,25,15,.35)'; for (let y = 720; y < CH; y += 9) g.fillRect(ox - 12 + r() * 6, y, 10 + r() * 12, 2);   // трещины коры внизу
+      const clumps = [];
+      for (let i = 0; i < 26; i++) { const t = r(), y = 120 + t * 330, side = r() < 0.5 ? -1 : 1, reach = (40 + r() * 170) * (0.55 + t * 0.6); clumps.push([ox + side * reach, y + (r() - 0.5) * 30, 34 + r() * 36, side]); }
+      clumps.sort((a, b) => b[1] - a[1]);
+      clumps.forEach(([x, y, R, side]) => {   // ветвь к пучку
+        g.strokeStyle = '#6b4a33'; g.lineWidth = 3 + r() * 3; g.beginPath(); g.moveTo(ox + (r() - 0.5) * 6, y + 30 + r() * 30); g.quadraticCurveTo((ox + x) / 2, y + 10, x - side * R * 0.3, y); g.stroke();
+      });
+      clumps.forEach(([x, y, R]) => { g.fillStyle = rgb('1e3219', 0.9, 0.95); g.beginPath(); g.ellipse(x, y + 4, R * 1.2, R * 0.5, (r() - 0.5) * 0.3, 0, 6.3); g.fill(); needles(x, y, R, '2d4a24', 420, 1); });
+      needles(ox, 130, 40, '2d4a24', 300, 1);
+    }
+    // --- ель / кедр (ячейка 1): узкий плотный конус, ярусы свисающих ветвей, острая верхушка
+    {
+      const ox = CW * 1.5, top = 40, bot = CH - 70;
+      g.fillStyle = '#3e2f24'; g.fillRect(ox - 7, bot - 20, 14, CH - bot + 20);
+      for (let i = 0; i < 34; i++) {
+        const t = i / 33, y = top + t * (bot - top), w = 16 + Math.pow(t, 0.95) * 215;
+        for (const side of [-1, 1]) {
+          const ex = ox + side * w * (0.8 + r() * 0.3), ey = y + 26 + t * 30;
+          g.fillStyle = rgb('14261a', 0.9 + r() * 0.2, 0.97); g.beginPath(); g.moveTo(ox, y - 8); g.quadraticCurveTo(ox + side * w * 0.6, y - 4, ex, ey); g.lineTo(ex - side * 18, ey + 10); g.quadraticCurveTo(ox + side * w * 0.4, y + 22, ox, y + 26); g.closePath(); g.fill();
+          for (let k = 0; k < 26; k++) { const u = r(), px = ox + (ex - ox) * u, py = y + (ey - y) * u * u - 2; g.strokeStyle = rgb('2b4a30', 0.75 + (1 - t) * 0.35 + r() * 0.3 + (u > 0.6 ? 0.2 : 0), 0.9); g.lineWidth = 1 + r(); g.beginPath(); g.moveTo(px, py); g.lineTo(px + side * (3 + r() * 6), py + 4 + r() * 6); g.stroke(); }
+        }
+      }
+      g.fillStyle = '#1b3121'; g.beginPath(); g.moveTo(ox, 8); g.lineTo(ox - 10, 70); g.lineTo(ox + 10, 70); g.closePath(); g.fill();
+    }
+    // --- берёза (ячейка 2): белый ствол с чёрными чечевичками, тонкие ветви, ажурная светлая крона
+    {
+      const ox = CW * 2.5;
+      g.fillStyle = '#e9e6de'; g.beginPath(); g.moveTo(ox - 10, CH); g.lineTo(ox - 5, 330); g.lineTo(ox + 2, 200); g.lineTo(ox + 6, 330); g.lineTo(ox + 10, CH); g.closePath(); g.fill();
+      g.fillStyle = '#2a2a28'; for (let y = 360; y < CH; y += 10 + r() * 22) g.fillRect(ox - 9 + r() * 4, y, 6 + r() * 12, 2 + r() * 3);
+      const tips = [];
+      for (let i = 0; i < 18; i++) { const y0 = 260 + r() * 420, side = r() < 0.5 ? -1 : 1, L = 80 + r() * 150; const ex = ox + side * L, ey = y0 - 60 - r() * 120; g.strokeStyle = '#6d6259'; g.lineWidth = 2 + r() * 2; g.beginPath(); g.moveTo(ox, y0); g.quadraticCurveTo(ox + side * L * 0.4, y0 - 20, ex, ey); g.stroke(); tips.push([ex, ey], [(ox + ex) / 2, (y0 + ey) / 2 - 20]); }
+      tips.push([ox, 190], [ox - 40, 240], [ox + 40, 230]);
+      tips.forEach(([x, y]) => {
+        for (let k = 0; k < 170; k++) { const a = r() * 6.28, d = Math.sqrt(r()) * 62, px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.8 + 10;
+          const lit = 0.7 + 0.6 * Math.max(0, (y - py) / 62 * 0.5 + 0.5) + (r() - 0.5) * 0.3; g.fillStyle = rgb(r() < 0.12 ? '9aa84a' : '5e8a36', lit, 0.92); g.beginPath(); g.ellipse(px, py, 3.2 + r() * 2.5, 2.2 + r() * 1.8, r() * 3, 0, 6.3); g.fill(); }
+      });
+    }
+    treeAtlas = new T.CanvasTexture(c); treeAtlas.encoding = T.sRGBEncoding; treeAtlas.anisotropy = 8;
+    return treeAtlas;
+  }
+  const TREE_W = [0.5, 0.5, 0.62];   // ширина плоскости к высоте: сосна, ель, берёза
+  function crossTreeGeometry(k) {
+    const w = TREE_W[k], pos = [], nor = [], uv = [], idx = [];
+    for (let p = 0; p < 3; p++) {
+      const a = p * Math.PI / 3, cx = Math.cos(a), cz = Math.sin(a), b = pos.length / 3;
+      [[-1, 0], [1, 0], [1, 1], [-1, 1]].forEach(([s, y]) => {
+        const x = cx * s * w / 2, z = cz * s * w / 2; pos.push(x, y, z);
+        const n = new T.Vector3(x * 1.6, 0.55 + y * 0.35, z * 1.6).normalize(); nor.push(n.x, n.y, n.z);   // «округлая» крона: нормали от оси ствола и вверх
+        uv.push((k + (s + 1) / 2) / 3, y);
+      });
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+    return g;
+  }
   function forest(d) {
     const a = new Int16Array(b64(d.trees)), n = a.length / 4, grp = new T.Group(); grp.name = 'forest';
     const NEAR_R = MOBILE ? 220 : 380, FAR_R = MOBILE ? 1000 : 1900;   // дальше — полог леса в шейдере рельефа
@@ -351,17 +427,19 @@
       if (dist < NEAR_R) near[k].push([x, y, z, h, i]); else if (dist < FAR_R) far[k].push([x, y, z, h, i]);
     }
     const r = rng(5), col = new T.Color(), mtx = new T.Matrix4(), q = new T.Quaternion(), up = new T.Vector3(0, 1, 0);
-    const geos = treeGeometries();
-    const solid = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.4 });
+    const atlas = treeAtlasTexture();
+    const leaf = new T.MeshStandardMaterial({ map: atlas, alphaTest: 0.42, side: T.DoubleSide, roughness: 0.9, metalness: 0, envMapIntensity: 0.45 });
+    leaf.alphaToCoverage = true;
+    const leafDepth = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking, map: atlas, alphaTest: 0.42, side: T.DoubleSide });   // тень по силуэту кроны
     near.forEach((list, k) => {
       if (!list.length) return;
-      const im = new T.InstancedMesh(geos[k], solid, list.length);
+      const im = new T.InstancedMesh(crossTreeGeometry(k), leaf, list.length);
       list.forEach((t, i) => {
-        const wf = 0.85 + r() * 0.3; q.setFromAxisAngle(up, r() * 6.283);
-        mtx.compose(new T.Vector3(t[0], t[1] - 0.3, t[2]), q, new T.Vector3(t[3] * wf, t[3], t[3] * wf)); im.setMatrixAt(i, mtx);
-        const b = 0.82 + r() * 0.3; col.setRGB(b * (0.95 + r() * 0.1), b, b * (0.92 + r() * 0.12)); im.setColorAt(i, col);
+        const wf = 0.8 + r() * 0.4; q.setFromAxisAngle(up, r() * 6.283);
+        mtx.compose(new T.Vector3(t[0], t[1] - 0.25, t[2]), q, new T.Vector3(t[3] * wf, t[3] * (0.92 + r() * 0.16), t[3] * wf)); im.setMatrixAt(i, mtx);
+        const b = 0.85 + r() * 0.3; col.setRGB(b * (0.94 + r() * 0.12), b, b * (0.9 + r() * 0.14)); im.setColorAt(i, col);
       });
-      im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; grp.add(im);
+      im.customDepthMaterial = leafDepth; im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; grp.add(im);
     });
     const bbMat = new T.MeshStandardMaterial({ map: billboardTexture(), alphaTest: 0.5, side: T.DoubleSide, roughness: 0.95, metalness: 0, envMapIntensity: 0.35 });
     far.forEach((list, k) => {
@@ -398,8 +476,17 @@
     if (o.windows) { g.fillStyle = '#2b3440'; for (let i = 0; i < 3; i++) g.fillRect((len - 3.5 - i * 1.6) * ppm, Hh - 3.6 * ppm, ppm * 1.1, ppm * 1.1); }
     return ctex(c);
   }
+  function signCanvas(len, h) {   // вывеска «АЛТАЙ АВИА» на аттике (как на фото базы)
+    const ppm = 64, W = Math.round(len * ppm), Hh = Math.round(h * ppm), c = canvas(W, Hh), g = c.getContext('2d');
+    g.fillStyle = '#eef1f4'; g.fillRect(0, 0, W, Hh);
+    g.fillStyle = BLUE; g.fillRect(0, 0, W, ppm * 0.22); g.fillRect(0, Hh - ppm * 0.14, W, ppm * 0.14);
+    g.fillStyle = BLUE; g.font = '800 ' + Math.round(Hh * 0.5) + 'px Unbounded, "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('АЛТАЙ АВИА', W / 2, Hh * 0.56);
+    const t = ctex(c); t.anisotropy = 16; return t;
+  }
   function hangar(hd) {
     const grp = new T.Group(), x0 = hd.x[0], x1 = hd.x[1], z0 = hd.z[0], z1 = hd.z[1], h = hd.h, W = x1 - x0, L = z1 - z0;
+    grp.userData.box = new T.Box3(new T.Vector3(x0, 0, z0), new T.Vector3(x1, h + (hd.step ? 2.4 : 0.4), z1)); grp.name = 'hangar-' + hd.name;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     const mk = (len, hh, o) => new T.MeshStandardMaterial({ map: wallCanvas(len, hh, Object.assign({ kind: hd.kind }, o || {})), roughness: 0.6, metalness: 0.05 });
     const wall = (len, hh, mat, x, z, ry) => { const m = new T.Mesh(new T.PlaneGeometry(len, hh), mat); m.position.set(x, hh / 2, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; grp.add(m); };
@@ -410,8 +497,8 @@
     const roof = new T.Mesh(new T.BoxGeometry(W + 0.3, 0.35, L + 0.3), new T.MeshStandardMaterial({ color: lin(hd.kind === 'dark' ? 0x2e333a : 0xd3d7db), roughness: 0.7 }));
     roof.position.set(cx, h + 0.05, cz); roof.castShadow = true; grp.add(roof);
     if (hd.step) {   // ступенчатый аттик фасада (как на фото южного ангара)
-      const sw = L * 0.46, sh = 2.2, mat = mk(sw, sh);
-      const s = new T.Mesh(new T.BoxGeometry(1.2, sh, sw), [mat, mat, new T.MeshStandardMaterial({ color: lin(0xd3d7db) }), mat, mat, mat]);
+      const sw = L * 0.46, sh = 2.2, mat = mk(sw, sh), sign = new T.MeshStandardMaterial({ map: signCanvas(sw, sh), roughness: 0.55 });
+      const s = new T.Mesh(new T.BoxGeometry(1.2, sh, sw), [sign, mat, new T.MeshStandardMaterial({ color: lin(0xd3d7db) }), mat, mat, mat]);
       s.position.set(x1 - 0.6, h + sh / 2, cz); s.castShadow = true; grp.add(s);
     }
     return grp;
@@ -420,10 +507,20 @@
   /* ---------- перрон, площадки, рулёжки, стоянка ---------- */
   function concreteCanvas(wm, hm, ppm, o) {
     const W = Math.round(wm * ppm), Hh = Math.round(hm * ppm), c = canvas(W, Hh), g = c.getContext('2d'), r = rng(o.seed || 1);
-    g.fillStyle = o.base || '#b9b6ae'; g.fillRect(0, 0, W, Hh);
+    g.fillStyle = o.base || '#a6a49c'; g.fillRect(0, 0, W, Hh);
+    for (let i = 0; i < wm * hm / 12; i++) {   // пятна цвета бетона разных плит и износ
+      g.fillStyle = r() > 0.5 ? 'rgba(255,250,240,' + (r() * 0.05) + ')' : 'rgba(40,38,34,' + (r() * 0.05) + ')';
+      g.fillRect(r() * W, r() * Hh, ppm * (1 + r() * 4), ppm * (1 + r() * 4));
+    }
     for (let i = 0; i < W * Hh / 60; i++) { const a = r() * 0.07; g.fillStyle = r() > 0.5 ? 'rgba(255,255,255,' + a + ')' : 'rgba(0,0,0,' + a + ')'; g.fillRect(r() * W, r() * Hh, 1 + r() * 2, 1 + r() * 2); }
     for (let i = 0; i < wm * hm / 30; i++) { g.fillStyle = 'rgba(60,55,45,' + (0.03 + r() * 0.06) + ')'; g.beginPath(); g.ellipse(r() * W, r() * Hh, ppm * (0.5 + r() * 2.5), ppm * (0.4 + r() * 1.6), r() * 3, 0, 6.3); g.fill(); }
-    const slab = o.slab || 5; g.strokeStyle = 'rgba(70,70,70,0.35)'; g.lineWidth = Math.max(1, ppm * 0.03);
+    if (o.tracks) for (let i = 0; i < o.tracks; i++) {   // следы колёс и масляные пятна у стоянок
+      const x = r() * W, y = r() * Hh, L = ppm * (8 + r() * 20), a = (r() - 0.5) * 0.5 + (r() < 0.5 ? 0 : Math.PI / 2);
+      g.strokeStyle = 'rgba(35,33,30,' + (0.05 + r() * 0.07) + ')'; g.lineWidth = ppm * (0.18 + r() * 0.15);
+      for (const off of [-0.9, 0.9]) { g.beginPath(); g.moveTo(x - Math.sin(a) * off * ppm, y + Math.cos(a) * off * ppm); g.lineTo(x + Math.cos(a) * L - Math.sin(a) * off * ppm, y + Math.sin(a) * L + Math.cos(a) * off * ppm); g.stroke(); }
+      if (r() < 0.4) { g.fillStyle = 'rgba(25,22,20,' + (0.08 + r() * 0.1) + ')'; g.beginPath(); g.ellipse(x, y, ppm * (0.4 + r()), ppm * (0.3 + r() * 0.7), r() * 3, 0, 6.3); g.fill(); }
+    }
+    const slab = o.slab || 5; g.strokeStyle = 'rgba(60,58,54,0.3)'; g.lineWidth = Math.max(1, ppm * 0.035);
     for (let x = 0; x <= wm; x += slab) { g.beginPath(); g.moveTo(x * ppm, 0); g.lineTo(x * ppm, Hh); g.stroke(); }
     for (let y = 0; y <= hm; y += slab) { g.beginPath(); g.moveTo(0, y * ppm); g.lineTo(W, y * ppm); g.stroke(); }
     return { c, g, W, Hh };
@@ -446,7 +543,7 @@
     return ground(p.s, p.s, ctex(c), p.x, p.z, 0.035);
   }
   function apronMesh(a) {
-    const wm = a.x[1] - a.x[0], hm = a.z[1] - a.z[0], ppm = 11, { c, g, W, Hh } = concreteCanvas(wm, hm, ppm, { seed: 9, slab: 6 });
+    const wm = a.x[1] - a.x[0], hm = a.z[1] - a.z[0], ppm = 11, { c, g, W, Hh } = concreteCanvas(wm, hm, ppm, { seed: 9, slab: 6, tracks: 70 });
     g.strokeStyle = YEL; g.lineWidth = 0.22 * ppm;
     const cx = (wm * 0.42) * ppm;                                   // осевая линия руления
     g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, Hh); g.stroke();
@@ -458,7 +555,7 @@
   }
   function taxiway(t) {
     const [p0, p1, w] = t, dx = p1[0] - p0[0], dz = p1[1] - p0[1], L = Math.hypot(dx, dz);
-    const { c } = concreteCanvas(w, Math.min(L, 60), 18, { seed: 21, slab: w, base: '#b4b1a8' });
+    const { c } = concreteCanvas(w, Math.min(L, 60), 18, { seed: 21, slab: w, base: '#a19f97', tracks: 4 });
     const tex = ctex(c, true); tex.repeat.set(1, L / Math.min(L, 60));
     const m = ground(w, L, tex, (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, 0.02, 0);
     m.rotation.z = -Math.atan2(dx, -dz); return m;   // ось полосы — вдоль отрезка
@@ -505,22 +602,125 @@
     return g;
   }
 
+  /* ---------- окружение базы: мачты освещения, ограждение, огни рулёжки, топливозаправщик, другие вертолёты ---------- */
+  function masts(a) {
+    const parts = [], steel = lin(0xb7bcc2), lamp = lin(0xf4f6f8), dark = lin(0x3a3f45);
+    for (let z = a.z[0] + 12; z < a.z[1]; z += 50) {
+      const x = a.x[1] + 1.5;
+      parts.push({ g: new T.CylinderGeometry(0.16, 0.26, 16, 10), m: M4(x, 8, z, 1), c: steel });
+      parts.push({ g: new T.BoxGeometry(0.25, 0.25, 3.6), m: M4(x - 0.3, 15.6, z, 1), c: steel });
+      [-1.3, 0, 1.3].forEach(dz => { parts.push({ g: new T.BoxGeometry(0.5, 0.7, 0.9), m: M4(x - 0.6, 15.3, z + dz, 1), c: dark }); parts.push({ g: new T.BoxGeometry(0.06, 0.6, 0.8), m: M4(x - 0.88, 15.3, z + dz, 1), c: lamp }); });
+      parts.push({ g: new T.BoxGeometry(0.7, 0.3, 0.7), m: M4(x, 0.15, z, 1), c: lin(0x9a9fa5) });
+    }
+    const m = new T.Mesh(merge(parts), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.6 }));
+    m.castShadow = true; m.name = 'masts'; return m;
+  }
+  function fence(f) {
+    // ограждение территории вертодрома: столбы и сетка-рабица (прозрачная текстура)
+    const c = canvas(128, 128), g = c.getContext('2d'); g.clearRect(0, 0, 128, 128);
+    g.strokeStyle = 'rgba(150,158,165,0.95)'; g.lineWidth = 2.2;
+    for (let i = -128; i < 256; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 128, 128); g.stroke(); g.beginPath(); g.moveTo(i + 128, 0); g.lineTo(i, 128); g.stroke(); }
+    g.fillStyle = 'rgba(120,128,136,1)'; g.fillRect(0, 0, 128, 5); g.fillRect(0, 123, 128, 5);
+    const tex = ctex(c, true), H = 2.2, grp = new T.Group(); grp.name = 'fence';
+    const mat = new T.MeshStandardMaterial({ map: tex, alphaTest: 0.3, transparent: false, side: T.DoubleSide, roughness: 0.6, metalness: 0.5 });
+    const posts = [];
+    const seg = (x0, z0, x1, z1) => {
+      const L = Math.hypot(x1 - x0, z1 - z0), t = tex.clone(); t.needsUpdate = true; t.repeat.set(L / 2.2, 1);
+      const m = new T.Mesh(new T.PlaneGeometry(L, H), Object.assign(mat.clone(), { map: t }));
+      m.position.set((x0 + x1) / 2, H / 2, (z0 + z1) / 2); m.rotation.y = -Math.atan2(z1 - z0, x1 - x0); grp.add(m);
+      for (let k = 0; k <= Math.floor(L / 3); k++) { const u = k * 3 / L; posts.push([x0 + (x1 - x0) * u, z0 + (z1 - z0) * u]); }
+    };
+    const [x0, x1] = f.x, [z0, z1] = f.z;
+    seg(x0, z0, x1, z0); seg(x1, z0, x1, z1 - 14); seg(x1, z1, x0 + 40, z1); seg(x0 + 28, z1, x0, z1); seg(x0, z1, x0, z0);   // проезды — разрывы у въезда
+    const pg = new T.CylinderGeometry(0.045, 0.045, H + 0.2, 6), im = new T.InstancedMesh(pg, new T.MeshStandardMaterial({ color: lin(0x8c949c), roughness: 0.5, metalness: 0.6 }), posts.length);
+    posts.forEach(([x, z], i) => im.setMatrixAt(i, M4(x, (H + 0.2) / 2, z, 1)));
+    grp.add(im); return grp;
+  }
+  function edgeLights(d) {
+    const pts = [];
+    d.taxiways.forEach(([a, b, w]) => {
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L;
+      for (let t = 4; t < L - 2; t += 14) { const x = a[0] + (b[0] - a[0]) * t / L, z = a[1] + (b[1] - a[1]) * t / L; pts.push([x + nx * (w / 2 + 0.6), z + nz * (w / 2 + 0.6)], [x - nx * (w / 2 + 0.6), z - nz * (w / 2 + 0.6)]); }
+    });
+    const body = new T.InstancedMesh(new T.CylinderGeometry(0.05, 0.07, 0.34, 8), new T.MeshStandardMaterial({ color: lin(0xe8b91a), roughness: 0.5 }), pts.length);
+    const cap = new T.InstancedMesh(new T.SphereGeometry(0.075, 10, 6), new T.MeshStandardMaterial({ color: lin(0x2f6bff), emissive: lin(0x3d7bff), emissiveIntensity: 1.4, roughness: 0.2 }), pts.length);
+    pts.forEach(([x, z], i) => { body.setMatrixAt(i, M4(x, 0.17, z, 1)); cap.setMatrixAt(i, M4(x, 0.38, z, 1)); });
+    const g = new T.Group(); g.add(body, cap); g.name = 'edge-lights'; return g;
+  }
+  function fuelTruck(x, z, ry) {
+    const p = [], orange = lin(0xe8741f), white = lin(0xeef0f2), dark = lin(0x1b1c1f), grey = lin(0x6b7076), glass = lin(0x1d2733);
+    const m = (px, py, pz, sx, sy, sz) => M4(0, 0, 0, 1).premultiply(new T.Matrix4().makeRotationY(ry)).premultiply(new T.Matrix4().makeTranslation(x, 0, z)).multiply(M4(px, py, pz, sx, sy, sz));
+    p.push({ g: new T.BoxGeometry(1, 1, 1), m: m(3.2, 1.55, 0, 1.9, 2.1, 2.45), c: orange });              // кабина
+    p.push({ g: new T.BoxGeometry(1, 1, 1), m: m(3.9, 2.05, 0, 0.5, 0.75, 2.3), c: glass });              // лобовое стекло
+    p.push({ g: new T.BoxGeometry(1, 1, 1), m: m(-0.4, 0.75, 0, 7.6, 0.35, 2.3), c: grey });              // рама
+    const tank = new T.CylinderGeometry(1.15, 1.15, 5.6, 20); tank.rotateZ(Math.PI / 2);
+    p.push({ g: tank, m: m(-0.9, 2.1, 0, 1), c: white });
+    const band = new T.CylinderGeometry(1.17, 1.17, 0.35, 20); band.rotateZ(Math.PI / 2);
+    p.push({ g: band, m: m(-0.9, 2.1, 0, 1), c: orange });
+    [[3.1, 1.1], [3.1, -1.1], [-1.6, 1.1], [-1.6, -1.1], [-2.8, 1.1], [-2.8, -1.1]].forEach(([wx, wz]) => { const w = new T.CylinderGeometry(0.52, 0.52, 0.4, 14); w.rotateX(Math.PI / 2); p.push({ g: w, m: m(wx, 0.52, wz, 1), c: dark }); });
+    const mesh = new T.Mesh(merge(p), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.25 }));
+    mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'fuel-truck'; return mesh;
+  }
+  function parkedHelis(spots) {
+    // другие вертолёты базы на соседних стоянках (упрощённые модели; как на фото перрона — белый, красный, чёрный AS350)
+    const g = new T.Group(); g.name = 'parked';
+    if (!H.buildAS350 || !H.LIVERY) return g;
+    const livs = [Object.assign({}, H.LIVERY.as350, { base: '#c8232b', accent: '#f4f5f6', accent2: '#1d1f24', reg: 'RA-07520', skid: 0x1d1f24 }),
+                  Object.assign({}, H.LIVERY.as350, { base: '#1c1f25', accent: '#e9ecef', accent2: '#9aa3ad', reg: 'RA-07291', skid: 0x1c1f25 })];
+    spots.forEach(([x, z], i) => {
+      const m = H.buildAS350(livs[i % livs.length]);
+      m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } if (/rotor/i.test(o.name || '')) o.rotation.y = 0.5 + i * 0.7; });
+      const b = new T.Box3().setFromObject(m); m.position.set(x, -b.min.y, z); m.rotation.y = i % 2 ? 0.08 : -0.05; g.add(m);
+    });
+    return g;
+  }
+
   /* ---------- сборка сцены ---------- */
+  function apronSpots(a) {   // центры жёлтых кругов стоянок перрона (как в apronMesh)
+    const wm = a.x[1] - a.x[0], hm = a.z[1] - a.z[0], out = [];
+    for (let zc = 16; zc < hm - 8; zc += 24) out.push([a.x[0] + wm * 0.7, a.z[0] + zc]);
+    return out;
+  }
   function build(d, tex) {
     const grp = new T.Group(); grp.name = 'Karasuk';
-    const terr = terrain(d, tex); grp.add(terr);
+    // борт — на стоянке перрона перед большим южным ангаром: вся сцена сдвигается так, чтобы стоянка была в начале координат
+    const south = d.hangars.find(h => h.name === 'south') || d.hangars[0], hz = (south.z[0] + south.z[1]) / 2;
+    const spots = apronSpots(d.apron), spot = spots.reduce((b, s) => Math.abs(s[1] - hz) < Math.abs(b[1] - hz) ? s : b);
+    grp.position.set(-spot[0], 0, -spot[1]);
+    const terr = terrain(d, tex); grp.add(terr); terr.userData.U.uOrigin.value.set(-spot[0], -spot[1]);
     grp.add(apronMesh(d.apron));
     d.taxiways.forEach(t => grp.add(taxiway(t)));
     d.pads.forEach(p => grp.add(padMesh(p)));
     grp.add(parking(d.parking));
-    d.hangars.forEach(h => grp.add(hangar(h)));
+    const hangars = d.hangars.map(h => { const hg = hangar(h); grp.add(hg); return hg; });
     grp.add(houses(d.houses || [], d.small));
     grp.add(cars(d.cars));
-    grp.add(grassTufts(d));
+    grp.add(grassTufts(d, spot[0] + 30, spot[1]));
     grp.add(windsock(d.windsock));
+    grp.add(masts(d.apron));
+    grp.add(fence({ x: [d.apron.x[0] - 29, 34], z: [d.apron.z[0] - 12, 124] }));
+    grp.add(edgeLights(d));
+    grp.add(fuelTruck(d.apron.x[0] + 9, d.apron.z[0] + 34, Math.PI / 2));
+    const others = spots.filter(s => s !== spot && Math.abs(s[1] - spot[1]) < 60 && Math.abs(s[1] - spot[1]) > 30).slice(0, 2);
+    grp.add(parkedHelis(others));
     grp.add(forest(d));
     const sk = sky(); grp.add(sk);
-    grp.userData.tick = t => { terr.userData.tick(t); sk.userData.tick(t); };
+    // ангар между камерой и бортом становится полупрозрачным (камера облетает борт по кругу)
+    const ray = new T.Ray(), wbox = new T.Box3(), hit = new T.Vector3(), off = grp.position;
+    hangars.forEach(hg => { hg.userData.op = 1; hg.traverse(o => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.userData.fade = true; }); }); });
+    const fadeHangars = (cam, target) => {
+      if (!cam || !target) return;
+      const dist = cam.position.distanceTo(target); ray.origin.copy(cam.position); ray.direction.copy(target).sub(cam.position).normalize();
+      hangars.forEach(hg => {
+        wbox.copy(hg.userData.box).translate(off);
+        const block = ray.intersectBox(wbox, hit) && cam.position.distanceTo(hit) < dist - 2;
+        const to = block ? 0.16 : 1, op = hg.userData.op + (to - hg.userData.op) * 0.12;
+        if (Math.abs(op - hg.userData.op) < 0.002 && op === hg.userData.opApplied) return;
+        hg.userData.op = Math.abs(op - to) < 0.01 ? to : op; hg.userData.opApplied = hg.userData.op;
+        hg.traverse(o => { if (!o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { const f = hg.userData.op < 0.999; m.transparent = f; m.opacity = hg.userData.op; m.depthWrite = !f; }); o.castShadow = hg.userData.op > 0.5; });
+      });
+    };
+    grp.userData.tick = (t, cam, target) => { terr.userData.tick(t); sk.userData.tick(t); fadeHangars(cam, target); };
     return grp;
   }
 

@@ -39,6 +39,11 @@ class Mi8AMT:
     palette = {'strut': '#1D4FC9', 'tire': '#1B1C1F', 'hub': '#E6E9EC', 'frame': '#CDD2D8', 'rim': '#DDE1E5',
                'exh_metal': '#B3B7BB', 'exh_soot': '#1C1714', 'radome': '#F3F6F9'}
     silver = None    # окантовка остекления — нет (кабина белая)
+    nose_windows = False   # у Ми-8АМТ нос — обтекатель радара, сплошной; нижнее окно только сбоку (штатный проём)
+    # материал по деталям: (лак 0..1, шероховатость, металличность) → карта ORM для просмотрщика
+    M = {'paint': (1.0, 0.36, 0.02), 'tank': (1.0, 0.36, 0.02), 'frame': (1.0, 0.36, 0.02), 'pzu': (0.5, 0.32, 0.35), 'rotor': (0.0, 0.55, 0.25),
+         'strut': (1.0, 0.4, 0.02), 'tire': (0.0, 0.92, 0.0), 'hub': (0.4, 0.3, 0.6), 'glass_frame': (0.4, 0.3, 0.6), 'rim': (0.4, 0.3, 0.6),
+         'exh_metal': (0.0, 0.42, 0.75), 'exh_soot': (0.0, 0.95, 0.0), 'radome': (1.0, 0.36, 0.02)}
     def boundary(self, x):
         """Высота границы белого и синего вдоль фюзеляжа."""
         nose = 2.36 - 0.26 * smoothstep(3.4, 5.9, x)                        # под остеклением кабины
@@ -72,6 +77,11 @@ class Mi171:
     palette = {'strut': '#3B191C', 'tire': '#1B1C1F', 'hub': '#A08C78', 'frame': '#B4BAC1', 'rim': '#C8CCD1',
                'exh_metal': '#5E3A33', 'exh_soot': '#1C1714', 'radome': '#3B1618'}
     silver = hexc('#A9AFB6')     # серебристая окантовка всего остекления кабины (рамки, стойки)
+    nose_windows = True          # остекление почти всей кабины, внизу по центру — обтекатель радара
+    # «вишня металлик» под лаком, бронзовые баки (металл), серебристые рамки, матовая резина
+    M = {'paint': (1.0, 0.4, 0.22), 'tank': (0.6, 0.4, 0.55), 'frame': (0.7, 0.3, 0.75), 'pzu': (0.5, 0.34, 0.35), 'rotor': (0.0, 0.55, 0.25),
+         'strut': (1.0, 0.4, 0.2), 'tire': (0.0, 0.92, 0.0), 'hub': (0.5, 0.32, 0.7), 'glass_frame': (0.6, 0.26, 0.85), 'rim': (0.6, 0.26, 0.85),
+         'exh_metal': (0.4, 0.34, 0.5), 'exh_soot': (0.0, 0.95, 0.0), 'radome': (1.0, 0.3, 0.45)}
     def line_y(self, x):
         return np.where(x > 3.55, 1.84 - 0.24 * smoothstep(3.55, 5.85, x), 1.84)
     def body(self, P, N):
@@ -157,12 +167,12 @@ def main(key):
     col = L.body(P, Nn)
     for d in L.decals(): col = d.apply(col, P, Nn)
     # под нижними стёклами носа (у исходника там глухая обшивка) — тёмный «салон», стекло над ним прозрачное
-    dk = mi8_nose.inside(P) & (role_map[sel] == 6)
+    dk = (mi8_nose.inside(P) & (role_map[sel] == 6)) if L.nose_windows else np.zeros(len(P), bool)
     col[dk] = hexc('#1B2024')
     if L.silver is not None:
         # серебристая окантовка остекления: полоса ≈6 см вокруг каждого проёма (стойки между стёклами — целиком)
         rm = role_map[sel]
-        a = frame_band(P, mi8_geom.cockpit_loops(G) + mi8_nose.outlines(G), 0.06, 0.008) * (rm == 6) * ~dk
+        a = frame_band(P, mi8_geom.cockpit_loops(G) + (mi8_nose.outlines(G) if L.nose_windows else []), 0.06, 0.008) * (rm == 6) * ~dk
         a = np.maximum(a, (rm == 7).astype(float))
         col = col * (1 - a[:, None]) + L.silver[None] * a[:, None]
     det = detail[sel].copy(); det[erase_mask(P)] = np.clip(det[erase_mask(P)], 0.97, 1.03)
@@ -184,6 +194,23 @@ def main(key):
     sel = cov & (role_map == 5)
     g = (lum[sel] / 110.0)[:, None]
     out[sel] = np.clip(L.blade[None] * np.clip(g, 0.55, 1.5), 0, 255)
+    # затенение (AO): щели, днище над баками, ниши шасси, воздухозаборники — по геометрии всей модели (кроме винтов)
+    import bake_ao
+    aomask = cov & (role_map != 5)
+    ao = bake_ao.bake(pos, nrm, aomask, occ)
+    f = np.clip(ao / 0.9, 0, 1) ** 1.1
+    out[aomask] *= (0.36 + 0.64 * f[aomask])[:, None]
+    print('  AO: среднее %.2f, доля затенённых (<0.6) %.1f%%' % (ao[aomask].mean(), 100 * (ao[aomask] < 0.6).mean()))
+    # карта материалов ORM: R — лак, G — шероховатость, B — металличность
+    orm = np.zeros((H, W, 3), np.float32); orm[:] = (0, 0.8, 0)
+    for rid, mk in ((1, 'paint'), (6, 'paint'), (7, 'frame'), (2, 'tank'), (3, 'strut'), (4, 'pzu'), (5, 'rotor')):
+        orm[cov & (role_map == rid)] = L.M[mk]
+    orm[cov & dark & (role_map != 5)] = (0, 0.85, 0)                  # решётки, отверстия, резина исходника
+    for name in L.palette:
+        x0, y0, x1, y1 = mi8_geom.pal_rect(name); orm[y0:y1, x0:x1] = L.M['glass_frame' if name == 'frame' else name]
+    ex0, ey0, ew, eh = mi8_geom.EXH_STRIP; tt = (np.arange(ew) - 4) / (ew - 8)
+    orm[ey0:ey0 + eh, ex0:ex0 + ew] = np.stack([np.zeros(ew), 0.45 + 0.5 * tt, 0.6 * (1 - tt)], -1)[None]
+    Image.fromarray(np.clip(orm[::2, ::2] * 255, 0, 255).astype(np.uint8)).save(os.path.join(ROOT, 'build', 'import', key + '_orm.png'), optimize=True)
     # палитра (шасси, рамки окон, патрубки, обтекатель) — в свободном углу атласа
     for name, hx in L.palette.items():
         x0, y0, x1, y1 = mi8_geom.pal_rect(name); out[y0:y1, x0:x1] = hexc(hx)
