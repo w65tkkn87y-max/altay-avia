@@ -82,7 +82,9 @@ def route_card(it, root):
     desc = ' '.join(merge_desc(it['desc']))
     first = re.split(r'(?<=[.!?])\s', desc)[0] if desc else ''
     img = f'<img src="{root}{it["img"]}" alt="{esc(it["title"])}" loading="lazy">' if it['img'] else ''
-    return f'''<a class="route tilt" href="{root}ekskursii/{it['slug']}.html">
+    keys = sorted({heli_key(r['heli']) for r in it['rows']})
+    attrs = f'data-min="{dur_min(dur)}" data-price="{price_int(it["rows"][0]["price"]) if it["rows"] else 0}" data-helis="{" ".join(keys)}"'
+    return f'''<a class="route tilt" href="{root}ekskursii/{it['slug']}.html" {attrs} data-cursor="Маршрут">
   <div class="pic">{img}<span class="dur">⏱ {dur}</span></div>
   <div class="txt"><h3>{esc(it['title'])}</h3><p>{esc(first)}</p></div>
   <div class="foot"><span class="from">от <b>{price}</b></span><span class="more">Подробнее →</span></div>
@@ -115,7 +117,16 @@ def build_ekskursii():
         body = band(root, title, bandimg, [('ekskursii.html', 'Экскурсии'), (None, title.replace('Экскурсии на вертолёте ', ''))], sub) + f'''
 <section class="section"><div class="wrap">
   <div class="section-head reveal"><div><div class="eyebrow">{len(items)} маршрутов</div><h2>Выберите маршрут</h2></div><p>Цена «от» — за полёт на Eurocopter AS350 (до 5 пассажиров). Для групп доступны МИ-8АМТ и МИ-171.</p></div>
-  <div class="routes stagger">{cards}</div>
+  <div class="route-filter" data-filter="#routes" role="group" aria-label="Фильтр маршрутов">
+    <div class="rf-group" role="radiogroup" aria-label="Длительность"><small>Время</small>
+      <button type="button" data-f-dur="all" aria-pressed="true">Любое</button><button type="button" data-f-dur="0-60" aria-pressed="false">до 1 часа</button><button type="button" data-f-dur="61-180" aria-pressed="false">1–3 часа</button><button type="button" data-f-dur="181-9999" aria-pressed="false">более 3 часов</button></div>
+    <div class="rf-group" role="radiogroup" aria-label="Борт"><small>Борт</small>
+      <button type="button" data-f-heli="all" aria-pressed="true">Любой</button><button type="button" data-f-heli="as350" aria-pressed="false">AS350</button><button type="button" data-f-heli="mi8amt" aria-pressed="false">МИ-8АМТ</button><button type="button" data-f-heli="mi171" aria-pressed="false">МИ-171</button></div>
+    <label class="rf-sort"><small>Сортировка</small><select data-f-sort><option value="">по популярности</option><option value="price">сначала дешевле</option><option value="-price">сначала дороже</option><option value="min">сначала короче</option></select></label>
+    <span class="rf-count" aria-live="polite"><b data-f-count>{len(items)}</b> из {len(items)}</span>
+  </div>
+  <div class="routes stagger" id="routes">{cards}</div>
+  <p class="rf-empty" hidden>Нет маршрутов с такими условиями — <button type="button" data-f-reset>сбросить фильтр</button></p>
 </div></section>'''
         write(f'ekskursii/{fname}.html', page(root=root, title=title, desc=f'{title}: {len(items)} маршрутов с ценами и продолжительностью полёта на Eurocopter AS350, МИ-8АМТ и МИ-171.', active='ekskursii', body=body))
 
@@ -444,7 +455,6 @@ def build_helis():
   <div class="fleet">
     <div class="fleet-stage" data-cursor="Вращать">
       <div class="viewer" id="heli-viewer" data-model="{k}" data-helipad="1" data-rotor="idle" data-auto="1" data-theta="0.7" data-phi="1.42" data-fit="auto" data-ty-rel="0.5" data-true-scale="1" data-fov="30" aria-label="3D-модель {esc(h['name'])}"></div>
-      <div class="shutter" aria-hidden="true"></div>
       <div class="stage-hud"><span class="chip">Live 3D</span><span class="chip">борт {h['reg']}</span><span class="chip">масштаб 1:1</span></div>
       <div class="scale-bar" aria-hidden="true"><i></i><span>10 м</span></div>
       <div class="stage-controls">

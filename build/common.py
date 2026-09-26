@@ -79,7 +79,7 @@ ICON = {
 def logo(root):
     return f'<a class="brand" href="{root}index.html" aria-label="АлтайАвиа — на главную"><img class="keep" src="{root}img/misc/logo-big-25.png" alt="АлтайАвиа" width="213" height="70"></a>'
 
-HEAD_FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700;800&family=Golos+Text:wght@400;500;600;700&family=Oswald:wght@300;400;500;600&display=swap">'
+HEAD_FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700;800&family=Golos+Text:wght@400;500;600&family=Oswald:wght@400;500&display=swap">'
 
 ICON['spark'] = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 6.9L20 10.5l-6.4 1.6L12 19l-1.6-6.9L4 10.5l6.4-1.6z"/></svg>'
 ICON['arrow-ur'] = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg>'
@@ -177,7 +177,8 @@ def page(*, root, title, desc, active, body, scripts_3d=False, extra_head='', ca
              '<aside class="altimeter" aria-hidden="true"><div class="alt-read"><small>ВЫС</small><b data-alt>375</b><small>м</small></div>'
              '<div class="alt-scale"><i class="alt-fill"></i><i class="alt-cursor"></i></div>'
              '<div class="alt-marks"><span>4506</span><span>3000</span><span>1500</span><span>375</span></div></aside>'
-             '<div class="cursor" aria-hidden="true"><span class="cursor-label"></span></div>')
+             '<div class="cursor" aria-hidden="true"><span class="cursor-label"></span></div>'
+             '<div class="scroll-progress" aria-hidden="true"><i></i></div>')
     return f'''<!DOCTYPE html>
 <html lang="ru" data-root="{root}" data-models="{available_models()}" data-v="{BUILD_V}">
 <head>
@@ -207,6 +208,18 @@ def page(*, root, title, desc, active, body, scripts_3d=False, extra_head='', ca
 </body>
 </html>'''
 
+def heli_key(name):
+    """Название борта из таблицы маршрута → ключ модели."""
+    return 'as350' if 'AS350' in name else ('mi8amt' if '8АМТ' in name.upper() else 'mi171')
+
+def dur_min(s):
+    """«2ч 50мин» → 170."""
+    h = re.search(r'(\d+)\s*ч', s or ''); m = re.search(r'(\d+)\s*мин', s or '')
+    return (int(h.group(1)) * 60 if h else 0) + (int(m.group(1)) if m else 0)
+
+def price_int(s):
+    return int(re.sub(r'\D', '', s or '') or 0)
+
 def band(root, title, image, crumbs, sub='', pos='center'):
     """Обложка внутренней страницы: фото во всю ширину с параллаксом, крошки, заголовок посимвольно, приборная строка."""
     cr = ''.join('<li>%s</li>' % (('<a href="%s%s">%s</a>' % (root, h, t)) if h else t) for h, t in crumbs)
@@ -219,6 +232,9 @@ def band(root, title, image, crumbs, sub='', pos='center'):
 </section>'''
 
 def write(path, html):
+    import responsive
+    root = '../' * path.count('/')
+    html = responsive.picturize(html, root)   # WebP нужной ширины вместо тяжёлых JPG/PNG
     full = os.path.join(SITE, path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, 'w', encoding='utf-8') as f:

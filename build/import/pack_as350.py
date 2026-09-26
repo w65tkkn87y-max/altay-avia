@@ -301,3 +301,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    import subprocess; subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'make_tex2k.py'), 'as350'])   # текстура 2048 px для телефонов

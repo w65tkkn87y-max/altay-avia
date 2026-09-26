@@ -829,7 +829,7 @@
     this._loop = this._loop.bind(this); requestAnimationFrame(this._loop);
   }
   Viewer.prototype.setModel = function (model, view) {
-    if (this.model) { this.rig.remove(this.model); disposeGroup(this.model); }
+    if (this.model) { this.rig.remove(this.model); if (!this.model.userData.cached) disposeGroup(this.model); }   // кэшированные борта не уничтожаем — обратное переключение мгновенное
     this.model = model; this.rig.add(model);
     const b = model.userData.bounds || { length: 12, height: 3.5, width: 10, center: 0 };
     // view.fitRef — габариты эталонного борта: камера одна для всех моделей, поэтому борта видны в истинном масштабе
@@ -852,7 +852,11 @@
   };
   /* Общая обработка результата GLTFLoader: границы, поиск винтов по именам узлов, применение модели. */
   function onDoneGLTF(self, gltf, view, onDone) {
-    const m = gltf.scene; m.traverse(o => { if (o.isMesh) { o.castShadow = !o.material.transparent; } });   // стекло тени не отбрасывает
+    const m = prepModel(gltf.scene);
+    self.setModel(m, view); onDone && onDone(null, m);
+  }
+  function prepModel(m) {
+    m.traverse(o => { if (o.isMesh) { o.castShadow = !o.material.transparent; } });   // стекло тени не отбрасывает
     const box = new T.Box3().setFromObject(m); const size = box.getSize(new T.Vector3()); const c = box.getCenter(new T.Vector3());
     m.position.y -= box.min.y; m.position.x -= c.x; m.position.z -= c.z;
     m.userData.bounds = { length: size.x, height: size.y, width: size.z, center: 0, reach: Math.hypot(size.x, size.z) / 2 };
@@ -865,7 +869,7 @@
       rotors.push({ obj: o, axis: tail ? 'z' : 'y', dir: 1, disc, rpm: tail ? 1100 : 300 });
     });
     m.userData.rotors = rotors;
-    self.setModel(m, view); onDone && onDone(null, m);
+    return m;
   }
 
   /* Компактный формат моделей сайта (build/import/glb2js.py): обычный <script src="models/<key>.js">,
@@ -909,26 +913,108 @@
     });
     return root;
   }
-  const _packedTex = {};
-  Viewer.prototype.loadPacked = function (key, url, texBase, view, onDone) {
-    const self = this;
-    const build = data => {
-      // метка версии сборки: иначе браузер отдаст старую текстуру из кэша к новой геометрии
-      const ver = (url.match(/[?&]v=([^&]+)/) || [])[1] || (document.documentElement.dataset.v || '');
-      const texUrl = texBase + data.tex + (ver ? '?v=' + ver : '');
-      const finish = tex => { try { onDoneGLTF(self, { scene: packedToGroup(data, tex) }, view, onDone); } catch (e) { onDone && onDone(e); } };
-      if (_packedTex[texUrl]) return finish(_packedTex[texUrl]);
-      const tex = new T.TextureLoader().load(texUrl, () => finish(tex), undefined, () => finish(tex));
-      tex.flipY = false; tex.encoding = T.sRGBEncoding; tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.anisotropy = 8;
-      _packedTex[texUrl] = tex;
-    };
+  /* Загрузка компактных моделей: скрипт данных и текстура запрашиваются один раз на страницу (общий реестр),
+     построенный борт кэшируется в каждом просмотрщике — повторный показ мгновенный. На телефонах — текстура 2048 px. */
+  const _packedTex = {}, _scriptWait = {};
+  function loadPackedData(key, url, cb) {
     const have = global.AltayModels && global.AltayModels[key];
-    if (have) return build(have);
+    if (have) return cb(null, have);
+    if (_scriptWait[key]) return _scriptWait[key].push(cb);
+    _scriptWait[key] = [cb];
     const s = document.createElement('script'); s.src = url; s.async = true;
-    s.onload = () => { const d = global.AltayModels && global.AltayModels[key]; if (d) build(d); else onDone && onDone(new Error('Нет данных модели ' + key)); };
-    s.onerror = () => onDone && onDone(new Error('Не удалось загрузить ' + url));
+    const flush = (err, d) => { const q = _scriptWait[key] || []; delete _scriptWait[key]; q.forEach(f => f(err, d)); };
+    s.onload = () => { const d = global.AltayModels && global.AltayModels[key]; d ? flush(null, d) : flush(new Error('Нет данных модели ' + key)); };
+    s.onerror = () => flush(new Error('Не удалось загрузить ' + url));
     (document.head || document.documentElement).appendChild(s);
+  }
+  function texUrlFor(data, url, texBase, low) {
+    // метка версии сборки: иначе браузер отдаст старую текстуру из кэша к новой геометрии
+    const ver = (url.match(/[?&]v=([^&]+)/) || [])[1] || (document.documentElement.dataset.v || '');
+    const name = low && data.tex2k ? data.tex2k : data.tex;
+    return texBase + name + (ver ? '?v=' + ver : '');
+  }
+  function loadPackedTex(texUrl, cb) {
+    const c = _packedTex[texUrl];
+    if (c) { if (c.ready) cb(c.tex); else c.wait.push(cb); return; }
+    const e = _packedTex[texUrl] = { ready: false, wait: [cb], tex: null };
+    const done = () => { e.ready = true; e.wait.splice(0).forEach(f => f(e.tex)); };
+    e.tex = new T.TextureLoader().load(texUrl, done, undefined, done);
+    e.tex.flipY = false; e.tex.encoding = T.sRGBEncoding; e.tex.wrapS = e.tex.wrapT = T.RepeatWrapping; e.tex.anisotropy = 8;
+  }
+  /* Только скачать (без построения) — для упреждающей загрузки соседних бортов */
+  function prefetchPacked(key, url, texBase, low) {
+    loadPackedData(key, url, (err, data) => { if (!err) loadPackedTex(texUrlFor(data, url, texBase, low), () => { }); });
+  }
+  Viewer.prototype.getPacked = function (key, url, texBase, cb) {
+    const self = this, cache = this._models || (this._models = {});
+    if (cache[key]) return cb(null, cache[key]);
+    loadPackedData(key, url, (err, data) => {
+      if (err) return cb(err);
+      loadPackedTex(texUrlFor(data, url, texBase, self.opts.lowTex), tex => {
+        if (cache[key]) return cb(null, cache[key]);
+        try { const m = prepModel(packedToGroup(data, tex)); m.userData.cached = true; m.userData.key = key; cache[key] = m; cb(null, m); }
+        catch (e) { cb(e); }
+      });
+    });
   };
+  Viewer.prototype.loadPacked = function (key, url, texBase, view, onDone) {
+    this.getPacked(key, url, texBase, (err, m) => { if (err) return onDone && onDone(err); this.setModel(m, view); onDone && onDone(null, m); });
+  };
+  /* «Прогрев»: один кадр борта в невидимой цели рендера — шейдеры компилируются и текстура уходит в видеопамять заранее,
+     поэтому при смене борта нет заминки на первом кадре */
+  Viewer.prototype.warm = function (m) {
+    if (!m || m.userData.warm || m.parent) return;
+    try {
+      const rt = this._warmRT || (this._warmRT = new T.WebGLRenderTarget(16, 16));
+      const sc = new T.Scene(); sc.environment = this.scene.environment; sc.add(new T.AmbientLight(0xffffff, 1)); sc.add(m);
+      const cam = new T.PerspectiveCamera(40, 1, 0.1, 200); cam.position.set(0, 3, 30); cam.lookAt(0, 2, 0);
+      const prev = this.renderer.getRenderTarget(); this.renderer.setRenderTarget(rt); this.renderer.render(sc, cam); this.renderer.setRenderTarget(prev);
+      sc.remove(m); m.userData.warm = true;
+    } catch (e) { }
+  };
+  /* Смена борта с анимацией: текущий взлетает и уходит из кадра, новый заходит сверху и садится на площадку.
+     getModel(cb) может отвечать не сразу (догрузка) — пока текущий борт в воздухе, сеть успевает. */
+  Viewer.prototype.swapTo = function (getModel, view, onLanded, onWait) {
+    const self = this, prevRotor = this.swapRotor || this.rotorState;
+    const sw = this.swap = { phase: this.model ? 'out' : 'wait', t: 0, dur: 1.05, next: null, view, prevRotor, onLanded, id: (this._swapId = (this._swapId || 0) + 1) };
+    this.swapRotor = prevRotor; this.fly = null;
+    if (this.model) this.setRotorState('fast');
+    getModel((err, m) => {
+      if (self.swap !== sw) return;                     // пока грузилось, выбрали другой борт
+      if (err) { self.swap = null; self.swapRotor = null; onLanded && onLanded(err); return; }
+      sw.next = m;
+    });
+    if (onWait) setTimeout(() => { if (self.swap === sw && !sw.next) onWait(true); }, 350);
+    sw.onWait = onWait;
+  };
+  Viewer.prototype._swapStep = function (dt, rig) {
+    const sw = this.swap; sw.t += dt;
+    if (sw.phase === 'out') {
+      const k = clamp(sw.t / sw.dur, 0, 1), e = k * k * (1.6 - 0.6 * k);
+      rig.position.set(e * 24, e * 15, e * -6); rig.rotation.set(0, 0, 0); rig.rotation.order = 'YXZ';
+      rig.rotation.z = -0.3 * Math.sin(Math.min(1, k * 1.6) * Math.PI / 2); rig.rotation.x = 0.12 * e;
+      if (k >= 1) { sw.phase = 'wait'; sw.t = 0; if (this.model) this.model.visible = false; }
+    }
+    if (sw.phase === 'wait' && sw.next) {
+      if (sw.onWait) sw.onWait(false);
+      this.setModel(sw.next, sw.view); this.setRotorState('fast');
+      sw.phase = 'in'; sw.t = 0; sw.dur = 1.9; sw.next.visible = true;
+    }
+    if (sw.phase === 'wait') { rig.position.set(0, 40, 0); return; }
+    if (sw.phase === 'in') {
+      const k = clamp(sw.t / sw.dur, 0, 1), e = 1 - Math.pow(1 - k, 3);
+      rig.rotation.set(0, 0, 0); rig.rotation.order = 'YXZ';
+      rig.position.set(-(1 - e) * 22, (1 - e) * 16 + Math.sin(k * Math.PI) * 0.6, (1 - e) * 5);
+      rig.rotation.y = (1 - e) * 0.55;
+      rig.rotation.z = 0.2 * Math.sin(k * Math.PI) * (1 - k * 0.4);   // выравнивание перед касанием — нос приподнят
+      rig.rotation.x = -(1 - e) * 0.18;
+      if (k >= 1) {
+        rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
+        const cb = sw.onLanded; this.setRotorState(sw.prevRotor || 'idle'); this.swap = null; this.swapRotor = null; cb && cb(null);
+      }
+    }
+  };
+  global.Heli3DPrefetch = prefetchPacked;
 
   /* Разбор уже загруженного glTF (JSON-строка или объект) — без единого сетевого запроса.
      Используется для моделей, встроенных прямо в HTML страницы (надёжнее fetch() в песочнице артефакта). */
@@ -1011,7 +1097,8 @@
       (this.model.userData.rotors || []).forEach(r => { const w = r.rpm / 60 * Math.PI * 2 * rate * dt * r.dir; if (r.axis === 'y') r.obj.rotation.y += w; else r.obj.rotation.z += w; });
       const t = this.clock.elapsedTime;
       const rig = this.rig;
-      if (this.fly) {
+      if (this.swap) this._swapStep(dt, rig);
+      else if (this.fly) {
         this.fly.t += dt; const k = easeOut(clamp(this.fly.t / this.fly.dur, 0, 1)), f = this.fly.from;
         rig.position.set(f.x * (1 - k), f.y * (1 - k), f.z * (1 - k)); rig.rotation.set(0, 0, 0);
         rig.rotation.z = f.roll * (1 - k); rig.rotation.x = 0; rig.rotation.order = 'YXZ';

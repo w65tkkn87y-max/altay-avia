@@ -126,6 +126,7 @@
   function flapBoard(board) {
     board.querySelectorAll('[data-flap]').forEach((cell, ri) => {
       const text = (cell.dataset.flap || '').toUpperCase(); cell.innerHTML = ''; cell.setAttribute('aria-label', cell.dataset.flap);
+      if (W.innerWidth < 640) { cell.classList.add('flap-plain'); cell.textContent = text; if (!REDUCED) cell.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 600, delay: ri * 80, fill: 'backwards', easing: 'cubic-bezier(.22,.8,.2,1)' }); return; }   // на телефоне строки короче — без «перекидных» ячеек
       text.split('').forEach((ch, ci) => {
         const c = D.createElement('span'); c.className = 'c' + (ch === ' ' ? ' space' : ''); c.textContent = ch === ' ' ? '' : ch; c.setAttribute('aria-hidden', 'true'); cell.appendChild(c);
         if (REDUCED || ch === ' ') return;
@@ -149,6 +150,7 @@
   }
 
   /* ---------- Прокрутка: высотомер, взлёт героя, параллакс, «время в пути», лента направлений, бегущая строка ---------- */
+  const prog = D.querySelector('.scroll-progress i');
   const alt = D.querySelector('.altimeter'), altNum = alt && alt.querySelector('[data-alt]');
   const hero = D.querySelector('[data-hero]'), heroCopy = D.querySelector('.hero-copy'), hudAlt = D.querySelector('[data-hud-alt]'), hudHdg = D.querySelector('[data-hud-hdg]');
   const heroStage = D.querySelector('.hero-stage'); if (heroStage) heroStage.setAttribute('data-cursor', 'Вращать');
@@ -176,6 +178,7 @@
     }
     lastY = y;
     // высотомер: страница — полёт с «Карасука» (375 м) к Белухе (4506 м)
+    if (prog) prog.style.transform = 'scaleX(' + p.toFixed(4) + ')';
     if (alt) { alt.style.setProperty('--p', p.toFixed(4)); if (altNum) altNum.textContent = altOf(p); alt.classList.toggle('is-on', y > 200); }
     if (hudAlt) hudAlt.textContent = altOf(p);
     // герой: вертолёт набирает высоту и уходит вправо-вверх, текст уплывает
@@ -257,6 +260,74 @@
     }
   }
 
+  /* ---------- «Посадочный талон»: расчёт полёта по тарифам маршрутов ---------- */
+  const calc = D.querySelector('[data-calc]');
+  if (calc) {
+    const J = JSON.parse(calc.querySelector('[data-calc-json]').textContent);
+    const fromSel = calc.querySelector('[data-calc-from]'), routeSel = calc.querySelector('[data-calc-route]'), seg = calc.querySelector('[data-calc-helis]');
+    const out = { dur: calc.querySelector('[data-calc-dur]'), pax: calc.querySelector('[data-calc-pax]'), price: calc.querySelector('[data-calc-price]') }, link = calc.querySelector('[data-calc-link]');
+    const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    let heli = 'as350', shown = 0;
+    const route = () => J.routes[fromSel.value][+routeSel.value] || J.routes[fromSel.value][0];
+    const fillRoutes = () => { routeSel.innerHTML = J.routes[fromSel.value].map((r, i) => '<option value="' + i + '">' + r.t.replace(/</g, '&lt;') + '</option>').join(''); };
+    const tween = (from, to) => { if (REDUCED) { out.price.textContent = fmt(to) + ' ₽'; return; } const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 650), e = 1 - Math.pow(1 - k, 3); out.price.textContent = fmt(Math.round(from + (to - from) * e)) + ' ₽'; if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); };
+    const render = () => {
+      const r = route(); if (!r.r.some(x => x.k === heli)) heli = r.r[0].k;
+      seg.innerHTML = r.r.map(x => '<button type="button" role="radio" aria-checked="' + (x.k === heli) + '" data-k="' + x.k + '">' + J.helis[x.k].n + '</button>').join('');
+      const row = r.r.find(x => x.k === heli);
+      out.dur.textContent = row.dur; out.pax.textContent = row.pax;
+      tween(shown, row.price); shown = row.price;
+      calc.classList.remove('is-tick'); void calc.offsetWidth; calc.classList.add('is-tick');
+      if (link) link.href = 'ekskursii/' + r.s + '.html';
+    };
+    fromSel.addEventListener('change', () => { fillRoutes(); render(); });
+    routeSel.addEventListener('change', render);
+    seg.addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (!b) return; heli = b.dataset.k; render(); });
+    calc.addEventListener('submit', e => {
+      e.preventDefault(); const r = route();
+      const q = new URLSearchParams({ route: r.t, heli: J.helis[heli].f, from: fromSel.value === 'village' ? 'Altay Village Телецкое' : 'Площадка «Карасук», с. Чепош' });
+      location.href = calc.getAttribute('action') + '?' + q.toString();
+    });
+    render();
+  }
+
+  /* ---------- Фильтр и сортировка маршрутов ---------- */
+  D.querySelectorAll('[data-filter]').forEach(bar => {
+    const list = D.querySelector(bar.dataset.filter); if (!list) return;
+    const cards = Array.from(list.children), order = cards.slice(), cnt = bar.querySelector('[data-f-count]'), empty = list.parentElement.querySelector('.rf-empty');
+    const st = { dur: 'all', heli: 'all', sort: '' };
+    const apply = () => {
+      const first = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
+      let n = 0;
+      cards.forEach(c => {
+        const m = +c.dataset.min, [a, b] = st.dur === 'all' ? [0, 1e9] : st.dur.split('-').map(Number);
+        const ok = m >= a && m <= b && (st.heli === 'all' || (' ' + c.dataset.helis + ' ').indexOf(' ' + st.heli + ' ') >= 0);
+        c.hidden = !ok; if (ok) n++;
+      });
+      const key = st.sort.replace('-', ''), dir = st.sort[0] === '-' ? -1 : 1;
+      const sorted = key ? cards.slice().sort((x, y) => (+x.dataset[key] - +y.dataset[key]) * dir) : order;
+      sorted.forEach(c => list.appendChild(c));
+      if (cnt) cnt.textContent = n; if (empty) empty.hidden = n > 0;
+      if (REDUCED) return;
+      cards.forEach(c => {   // плавная перестановка (FLIP)
+        if (c.hidden) return; const a = first.get(c), b = c.getBoundingClientRect();
+        if (!a.width) { c.animate([{ opacity: 0, transform: 'scale(.94)' }, { opacity: 1, transform: 'none' }], { duration: 450, easing: 'cubic-bezier(.22,.8,.2,1)' }); return; }
+        const dx = a.left - b.left, dy = a.top - b.top; if (!dx && !dy) return;
+        c.animate([{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'none' }], { duration: 550, easing: 'cubic-bezier(.22,.8,.2,1)' });
+      });
+    };
+    const press = (attr, val) => bar.querySelectorAll('[' + attr + ']').forEach(b => b.setAttribute('aria-pressed', b.getAttribute(attr) === val ? 'true' : 'false'));
+    bar.addEventListener('click', e => {
+      const d = e.target.closest('[data-f-dur]'), h = e.target.closest('[data-f-heli]');
+      if (d) { st.dur = d.dataset.fDur; press('data-f-dur', st.dur); apply(); }
+      if (h) { st.heli = h.dataset.fHeli; press('data-f-heli', st.heli); apply(); }
+    });
+    const sel = bar.querySelector('[data-f-sort]'); if (sel) sel.addEventListener('change', () => { st.sort = sel.value; apply(); });
+    const reset = empty && empty.querySelector('[data-f-reset]');
+    if (reset) reset.addEventListener('click', () => { st.dur = 'all'; st.heli = 'all'; press('data-f-dur', 'all'); press('data-f-heli', 'all'); apply(); });
+    list.classList.add('is-in');
+  });
+
   /* ---------- Лайтбокс галереи ---------- */
   const lbLinks = Array.from(D.querySelectorAll('a[data-lightbox]'));
   if (lbLinks.length) {
@@ -296,7 +367,8 @@
   });
   const q = new URLSearchParams(location.search);
   if (q.get('heli')) { const sel = D.querySelector('select[name=helicopter]'); if (sel) sel.value = q.get('heli'); }
-  if (q.get('route')) { const r = D.querySelector('input[name=route]'); if (r) r.value = q.get('route'); }
+  if (q.get('route')) { const r = D.querySelector('input[name=route]'); if (r) r.value = q.get('route'); const to = D.querySelector('input[name=to]'); if (to && !to.value) to.value = q.get('route'); }
+  if (q.get('from')) { const f = D.querySelector('input[name=from]'); if (f && !f.value) f.value = q.get('from'); }
 
   /* ---------- Версия для слабовидящих ---------- */
   const A11Y = 'aa-a11y';

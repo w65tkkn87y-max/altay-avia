@@ -144,7 +144,7 @@ def build_index(EX, esc):
 </section>'''
 
     # ---------------- парк (3D, истинный масштаб)
-    tabs = ''.join(f'<button class="fleet-tab" role="tab" aria-selected="{"true" if k=="mi171" else "false"}" data-fleet-tab="{k}" data-fleet-target="#fleet-viewer"><b>{HELIS[k]["name"]}</b><small>{HELIS[k]["sub"]} · {HELIS[k]["pax"]} пасс.</small></button>' for k in HELI_ORDER)
+    tabs = ''.join(f'<button class="fleet-tab" role="tab" aria-selected="{"true" if k=="mi171" else "false"}" data-fleet-tab="{k}" data-fleet-target="#fleet-viewer"><b>{HELIS[k]["name"].replace("Eurocopter ", '<span class="hide-sm">Eurocopter </span>')}</b><small>{HELIS[k]["sub"]} · {HELIS[k]["pax"]} пасс.</small></button>' for k in HELI_ORDER)
     specs = ''.join(f'<div class="spec-card" data-spec="{k}"{"" if k=="mi171" else " hidden"}><div class="reg">Борт {HELIS[k]["reg"]}</div><h3>{HELIS[k]["name"]}</h3><p class="spec-about">{HELIS[k]["about"]}</p><dl class="spec-list">' + ''.join(f'<div><dt>{a}</dt><dd>{b}</dd></div>' for a, b in HELIS[k]['specs']) + f'</dl><a class="btn btn-primary btn-block" href="zakaz-poleta.html?heli={esc(HELIS[k]["form"])}"><span>Заказать полёт · {HELIS[k]["price"]}/час</span>{ICON["arrow"]}</a></div>' for k in HELI_ORDER)
     fleet = f'''
 <section class="section fleet-sec" id="park">
@@ -154,7 +154,6 @@ def build_index(EX, esc):
   <div class="wrap-wide">
     <div class="fleet-stage img-reveal" data-cursor="Вращать">
       <div class="viewer" id="fleet-viewer" data-model="mi171" data-helipad="1" data-rotor="idle" data-auto="1" data-speed="0.1" data-theta="0.7" data-phi="1.42" data-fit="auto" data-ty-rel="0.5" data-true-scale="1" data-fov="30" data-offset="0.4" aria-label="3D-модель вертолёта"></div>
-      <div class="shutter" aria-hidden="true"></div>
       <div class="fleet-tabs" role="tablist" aria-label="Выбор вертолёта">{tabs}</div>
       <div class="fleet-panel">{specs}</div>
       <div class="stage-controls">
@@ -204,5 +203,43 @@ def build_index(EX, esc):
   </div>
 </section>'''
 
-    body = hero + marquee + legs + dests + about + fleet + board + serv
+    # ---------------- «посадочный талон»: расчёт полёта по реальным тарифам маршрутов
+    import json as _json
+    calc_data = {'altai': [], 'village': []}
+    for e in EX:
+        rows = [{'k': heli_key(r['heli']), 'pax': int(r['pax'] or 0), 'dur': r['dur'], 'price': price_int(r['price'])} for r in e['rows']]
+        if rows: calc_data[e['cat']].append({'t': e['title'], 's': e['slug'], 'r': rows})
+    short = {'as350': 'AS350', 'mi8amt': 'МИ-8АМТ', 'mi171': 'МИ-171'}
+    names = {k: {'n': short[k], 'f': HELIS[k]['form']} for k in HELI_ORDER}
+    first = calc_data['altai'][2]
+    route_opts = ''.join(f'<option value="{i}"{" selected" if it is first else ""}>{esc(it["t"])}</option>' for i, it in enumerate(calc_data['altai']))
+    calc = f'''
+<section class="calc-sec" id="calc">
+  <div class="wrap">
+    <form class="pass-card" data-calc action="zakaz-poleta.html" aria-label="Расчёт стоимости полёта">
+      <div class="pass-main">
+        <div class="pass-top"><span>Посадочный талон · Boarding pass</span><span class="pass-code">АлтайАвиа</span></div>
+        <h2 class="pass-title">Рассчитайте свой полёт</h2>
+        <div class="pass-fields">
+          <label class="pf pf-from"><small>Откуда</small><select name="from" data-calc-from><option value="altai">Площадка «Карасук»</option><option value="village">Altay Village Телецкое</option></select></label>
+          <span class="pf-arrow" aria-hidden="true">{ICON['plane']}</span>
+          <label class="pf pf-to"><small>Куда</small><select name="route" data-calc-route>{route_opts}</select></label>
+        </div>
+        <div class="pf pf-heli"><small>Борт</small><div class="seg" role="radiogroup" aria-label="Выбор вертолёта" data-calc-helis></div></div>
+      </div>
+      <div class="pass-stub">
+        <div class="stub-row"><small>В полёте</small><b data-calc-dur>—</b></div>
+        <div class="stub-row"><small>Пассажиров до</small><b data-calc-pax>—</b></div>
+        <div class="stub-row stub-price"><small>Стоимость</small><b data-calc-price>—</b></div>
+        <button class="btn btn-primary btn-block" type="submit"><span>Оформить заявку</span>{ICON['arrow']}</button>
+        <a class="stub-more" data-calc-link href="#">Подробнее о маршруте →</a>
+        <i class="barcode" aria-hidden="true"></i>
+      </div>
+      <script type="application/json" data-calc-json>{_json.dumps({'routes': calc_data, 'helis': names}, ensure_ascii=False)}</script>
+    </form>
+    <p class="calc-note">* Считается общее время аренды вертолёта, т.е. в обе стороны. Точную стоимость подтвердит менеджер.</p>
+  </div>
+</section>'''
+
+    body = hero + calc + marquee + legs + dests + about + fleet + board + serv
     write('index.html', page(root=root, title='Авиакомпания АлтайАвиа | официальный сайт', desc='Аренда вертолётов по городам Сибири, уникальные экскурсионные маршруты по Горному Алтаю, сервисное обслуживание и ангарное хранение вертолётов. Посадочная площадка «Карасук», Республика Алтай.', active='', body=body, scripts_3d=True, models=('mi171', 'mi8amt'), body_class='is-home'))
